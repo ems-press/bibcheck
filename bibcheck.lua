@@ -3,7 +3,7 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.8.4 (2021-02-05)
+-- @release 0.9.0 (2021-02-07)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
@@ -11,24 +11,13 @@
 --
 -- >> lua bibcheck.lua FILENAME.tex BSTFILENAME
 
-local lfs = require 'lfs'
-local pl_file = require 'pl.file'
-
--- Add path of main file to package path.
 local path = arg[0]
--- TODO path is used in CERMINE settings if jar is in the same folder!
 path = path:gsub('(.-)bibcheck.lua$', '%1')
 package.path = path .. '?.lua;' .. package.path
-local G = require 'EMS_functions'
 
---- CERMINE settings.
-local cermine = {
-	on = true,
-  --on = false,
-	jar = path .. 'cermine-impl-1.13-jar-with-dependencies.jar',
-	com = 'pl.edu.icm.cermine',
-	ref = 'bibref.CRFBibReferenceParser -format bibtex -reference '
-}
+local lfs = require 'lfs'
+local pl_file = require 'pl.file'
+local G = require 'functions'
 
 --- TeX file input path.
 local input_path = arg[1]
@@ -47,52 +36,23 @@ else
 end
 assert(input, 'File name not recognized.')
 
---- MRef settings.
-local mref = {
-	path = G.path(folder, 'MRef_response.html'),
-	-- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
-	url = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref='
-}
-
 --- Name for all (temporary and final) files created by this script.
 local output = input .. '-REFERENCES'
 --- Output path.
 local output_path = G.path(folder, output)
 
--- TODO global? (cannot be modified)
---- Content of the original TeX file.
+--- Content of the original tex file.
 local texcode = pl_file.read(input_path)
---- Complete bibliography string of the original TeX file.
-local bibcode = false
-
--- SIMON: Ich würde diese Unterscheidung gerne weiterhin haben und habe sie daher eingebaut (s.u.).
---- All critical  and all unmatched entries.
+--- All \bibitem labels.
+local labels = {}
+--- All critical cases.
 local critical_entries = {}
-local unmatched_entries = {}
+--- All unmatched cases.
+local unmatched_labels = {}
 
 --------------------------------------------------------------------------------
 
 -- Functions:
-
---- Check entry with MathSciNet.
--- @tparam string entry
--- @treturn string bibtex entry
-local function check_mref(entry)
-	G.execute('Checking MathSciNet', true,
-		'wget', ' --no-check-certificate', ' -O ', mref.path,
-		' ', G.quote_outer(mref.url .. G.quote_inner(entry)),
-		' 2>&1'
-	)
-	-- Read HTML code (if any)
-	local response = pl_file.read(mref.path)
-	if response:find('%* Matched %*') then
-		local bibtex = response:match('<pre>(.-)</pre>')
-		if bibtex then
-			return bibtex
-		end
-	end
-	return false
-end
 
 --- Correct some 'mistakes' in the BibTeX code.
 -- @tparam string entry
@@ -181,13 +141,19 @@ end
 -- @tparam string tex TeX code of the bibliography
 -- @treturn string bib bibliography
 local function select_bibliography(tex)
-	local p = '\\begin%s*{thebibliography}(.-)\\end%s*{thebibliography}'
-	local bib = tex:match(p)
+	-- return s (= original bibliography string if tex is not modified)
+	local s = '\\begin%s*{thebibliography}(.-)\\end%s*{thebibliography}'
+	local bib = tex:match(s)
 	assert(bib, 'No bibliography found.')
+	-- Remove comments.
+	bib = G.remove_comments(bib)
+	-- Save the argument of \begin{thebibliography}, usually "{9}" or "{99}".
+	-- TODO unused argument
+-- 	local bib_argument = bib:match('^(.-)\\bibitem')
 	return bib
 end
 
---- Collect all \bibitem in a table.
+--- Collect all \bibitem from 'input' in a table.
 -- @tparam string str
 -- @treturn table
 local function split_at_bibitem(str)
@@ -202,25 +168,6 @@ local function split_at_bibitem(str)
 	return t
 end
 
---- Try to structure unmatched entry.
--- @tparam string entry
--- @treturn string bibtex entry
-local function structure_unmatched(entry)
-	if cermine.on then
--- 		print('Raw entry: ' .. entry)
-		-- TODO delete all braces for valid TeX code?
-		entry = entry:gsub('[{}]', '')
-		local r = G.execute('CERMINE', true,
-			'java -cp ', cermine.jar, ' ',
-			cermine.com, '.', cermine.ref, G.quote_outer(entry),
-			' 2>&1'
-		)
--- 		print('CERMINE output: ' .. r)
-		return r
-	end
-	return false
-end
-
 --------------------------------------------------------------------------------
 
 -- Main functions:
@@ -228,9 +175,7 @@ end
 --- Check all \bibitem against the AMS MRef database.
 local function mref_bibliography()
 	-- Select the bibliography.
-	bibcode = select_bibliography(texcode)
-	-- Remove comments.
-	local bib = G.remove_comments(bibcode)
+	local bib = select_bibliography(texcode)
 	-- Collect all \bibitem in a table.
 	local tab = split_at_bibitem(bib)
 	-- Process each \bibitem.
@@ -241,46 +186,48 @@ local function mref_bibliography()
 		replace('\\bibitem[%%\n%s]*%b[][%%\n%s]*(%b{})', '\\bibitem%1')
 		replace('\\bibitem[%%\n%s]*(%b{})', '\\bibitem%1')
 		-- Remove \bibitem{.} and save the label.
-		local label = bibitem:match('\\bibitem%b{}')
-		-- don't use label here because of 'magic characters' issue.
+		labels[i] = bibitem:match('\\bibitem%b{}')
+		-- don't use labels[i] here because of 'magic characters' issue.
 		replace('\\bibitem%b{}', '')
-		label = label:match('\\bibitem{(.-)}$')
+		labels[i] = labels[i]:match('\\bibitem{(.-)}$')
 		-- Save original entry; delete leading spaces and empty lines.
 		local original = bibitem:gsub('^[\n%s]+', '')
-		-- Replace \newblock with space and spaces with "%20"
+		-- Escape \newblock with space and spaces with "%20"
 		replace('\\newblock', ' ')
 		replace('[%s\t]+', '%%20')
-		-- Check entry with www.ams.org/mathscinet-mref.
-		local match = check_mref(bibitem)
-		if match then
-			-- Matched entry:
+		-- Send entry to www.ams.org/mathscinet-mref.
+		local MRef_response_path = G.path(folder, 'MRef_response.html')
+		-- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
+		local url = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref='
+		G.execute('Check MathSciNet ' .. i, true,
+			'wget',
+			' --no-check-certificate',
+			' -O ', MRef_response_path,
+			' ', G.quote_outer(url .. G.quote_inner(bibitem)),
+			' 2>&1'
+		)
+		-- Read TEX code (if any) from MRef_response_path.
+		local MRef_response = pl_file.read(MRef_response_path)
+		if MRef_response:find('%* Matched %*') then
+			-- match found
+			local new_entry = MRef_response:match('<pre>(.-)</pre>')
 			-- Correct some 'mistakes' in the BibTeX entry.
-			local new = correct_bibtex(match)
+			new_entry = correct_bibtex(new_entry)
 			-- Change label back to the original one.
-			tab[i] = new:gsub('{MR%d+', '{' .. label, 1)
+			tab[i] = new_entry:gsub('{MR%d+', '{' .. labels[i], 1)
 			-- Check whether the entry is a critical case.
-			if critical_entry(original, new) then
-        local s = '\\bibitem{' .. label .. '}\n' .. original
+			if critical_entry(original, new_entry) then
+				local s = '\\bibitem{' .. labels[i] .. '}\n' .. original
 				table.insert(critical_entries, s)
 			end
-		else -- unmatched entry
-			local structured = structure_unmatched(original)
-			if structured then
-				-- Correct some 'mistakes' in the BibTeX entry.
-				local new = correct_bibtex(structured)
-				-- Normalize entry type to @article,
-				-- and change label back to the original one.
-				tab[i] = new:gsub('^(@%a+){[^,]+', '@article{' .. label, 1)
-			else -- = no Cermine = no alphabetical order
-				-- Unmatched and unstructured entry:
-				tab[i] = '@misc {' .. label .. ',\n'
-					.. ' NOTE = {' .. original .. '},\n}'
-			end
-      local s = '\\bibitem{' .. label .. '}\n' .. original
-      table.insert(unmatched_entries, s)
-		end
-		-- Remove mref.path.
-		os.remove(mref.path)
+		else
+			-- no match found
+			tab[i] = '@misc {' .. labels[i] .. ',\n'
+				.. ' NOTE = {' .. original .. '},\n}'
+		  table.insert(unmatched_labels, labels[i])
+    end
+		-- Remove MRef_response_path.
+		os.remove(MRef_response_path)
 	end
 	G.write_file(output_path .. '.bib', table.concat(tab, '\n\n'))
 end
@@ -299,82 +246,62 @@ local function create_bbl_output()
 	}
 	-- Write new tex file.
 	local tex_path = output_path .. '.tex'
--- 	print(folder)
-	G.write_file(tex_path, table.concat(t, '\n'))
+	print(folder)
+  G.write_file(tex_path, table.concat(t, '\n'))
 	-- Compile it.
 	G.execute('LaTeX', true,
 		'latex',
 		' -interaction=nonstopmode',
 		' -halt-on-error',
-		' -output-directory=', folder,
-		' ', tex_path,
+    ' -output-directory=', folder,
+    ' ', tex_path,
 		' 2>&1'
 	)
-	-- Save current working directory.
-	local cwd = lfs.currentdir()
 	-- Run bibtex.
 	lfs.chdir(folder)
 	G.execute('BibTeX', true, 'bibtex ', output)
-	-- Change back to current working directory.
-	lfs.chdir(cwd)
 end
 
-
-local function add_comments(bib, tab, text)
-  for i = 1, #tab do
+--- For each critical case, add the original \bibitem
+-- to the bbl file (as a comment).
+local function add_critical_entries()
+	local bbl_path = output_path .. '.bbl'
+	-- Read content of the bbl file.
+	local bib = pl_file.read(bbl_path)
+	-- Paste each critical \bibitem into the new bibliography.
+	for i = 1, #critical_entries do
 		-- Add % at the beginning of each line.
-		tab[i] = tab[i] .. '\n'
+		critical_entries[i] = critical_entries[i] .. '\n'
 		local new = {}
-		table.insert(new, text)
-		for line in tab[i]:gmatch('(.-)\n') do
+		table.insert(new, '%%%% COMPARE MATCH WITH ORIGINAL \\bibitem:')
+		for line in critical_entries[i]:gmatch('(.-)\n') do
 			if not line:find('^%c*$') then
 				table.insert(new, '%%' .. line)
 			end
 		end
 		-- Extract label.
-		local label = tab[i]:match('\\bibitem%b{}')
+		local label = critical_entries[i]:match('\\bibitem%b{}')
 		local escaped_label = G.escape_lua_pattern(label)
 		-- Paste original entry.
 		table.insert(new, '\n' .. label)
 		bib = bib:gsub(escaped_label, table.concat(new, '\n'))
+	end
+  -- Mark each unmatched \bibitem.
+  for i = 1, #unmatched_labels do
+    local old = {
+      '\\bibitem[%%\n%s]*{',
+      G.escape_lua_pattern(unmatched_labels[i]),
+      '}'    
+    }
+    local new = {
+      '%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
+      '\\bibitem{', unmatched_labels[i], '}'      
+    }
+    bib = bib:gsub(table.concat(old), table.concat(new))
   end
-	return bib
-end  
-
---- For each critical or unmatched case, add the original \bibitem to the bbl file.
-local function add_original_bibitem()
-	local bbl_path = output_path .. '.bbl'
-	-- Read content of the bbl file.
-	local bib = pl_file.read(bbl_path)
-	assert(bib, 'No BibTeX output (bbl) file found.')
-  -- SIMON: Diesen Block habe ich geändert, um zwischen "critial" und "unmatched" zu unterscheiden!
-  bib = add_comments(bib, critical_entries, '%%%% Double-check critical case.\n%%%% Original entry:')
-  bib = add_comments(bib, unmatched_entries, '%%%% Edit unmatched entry.\n%%%% Original entry:')  
 	-- Overwrite bbl file.
 	G.write_file(bbl_path, bib)
 end
-
---- Create output tex file.
-local function create_tex_output()
-	-- TODO global variable or return value + argument ...
-	-- instead of opening file again? ...
-	-- definitions (\providecommand) should be no problem
-	-- Read content of the modified bbl file.
-	local bib = pl_file.read(output_path .. '.bbl')
-	assert(bib, 'No BibTeX output (bbl) file found.')
-	local bbl = select_bibliography(bib)
-	-- Escape Lua patterns in search string.
-	local s = G.escape_lua_pattern(bibcode)
--- 	print('SEARCH:' .. s)
-	-- Escape percent character in replacement string.
-	local r = bbl:gsub('%%', '%%%%')
--- 	print('REPLACE: ' .. r)
-	-- Replace original bibliography with modified one.
-	local out = texcode:gsub(s, r, 1)
-	-- Overwrite tex file.
-	G.write_file(output_path .. '.tex', out)
-end
-
 
 -- ******
 -- STEP 1:
@@ -382,36 +309,33 @@ end
 -- For each \bibitem there is either
 -- (a) a match,
 -- (b) no match or
--- (c) a match but there is a suspicion that
--- the match is incorrect ("critical case").
+-- (c) a match but there is a suspicion that the match is incorrect
+-- ("critical case").
 -- Collect all entries in a bib file.
 
 mref_bibliography()
 
 -- ******
 -- STEP 2:
--- (a) Create a temporary tex file with not much more than
+-- (a) Create a temporary tex file with nothing more than
 -- \nocite{*} and \bibliography{BIB FILE}.
 -- (b) Run latex and bibtex to create a bbl file.
--- (c) For each critical or unmatched case, add the original \bibitem to the bbl file.
--- (d) Replace the bibliography in the original tex file by the new bibliography.
+-- (c) For each critical case, add the original \bibitem to the bbl file (as a comment).
 
 create_bbl_output()
-add_original_bibitem()
-create_tex_output()
+add_critical_entries()
 
 -- ******
 -- STEP 3:
 -- Remove all temporary files.
 
 local rm_ext = {
+ 	'.bib',
 	'.aux',
--- 	'.bbl',
-	'.bib',
 	'.blg',
 	'.dvi',
 	'.log',
--- 	'.tex'
+	'.tex'
 }
 for i = 1, #rm_ext do
 	os.remove(output_path .. rm_ext[i])
