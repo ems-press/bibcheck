@@ -3,7 +3,7 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.9.0 (2021-02-07)
+-- @release 0.9.1 (2021-02-08)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
@@ -17,19 +17,20 @@ package.path = path .. '?.lua;' .. package.path
 
 local lfs = require 'lfs'
 local pl_file = require 'pl.file'
-local G = require 'functions'
+local F = require 'functions'
+local C = require 'config'
 
 --- TeX file input path.
 local input_path = arg[1]
 --- Bibliography style (for example, "amsplain").
-local bst = arg[2] or 'amsplain'
+local bst = arg[2] or C.bibstyle
 
 local folder, input
 local texpattern = '(.-)%.tex$'
 -- Check if input_path is a full path (with separator)
 -- or a file name (no separator).
-if input_path:find(G.sep) then
-	folder, input = input_path:match(G.path('(.+)', texpattern))
+if input_path:find(F.sep) then
+	folder, input = input_path:match(F.path('(.+)', texpattern))
 else
 	folder = lfs.currentdir()
 	input = input_path:match(texpattern)
@@ -37,9 +38,10 @@ end
 assert(input, 'File name not recognized.')
 
 --- Name for all (temporary and final) files created by this script.
-local output = input .. '-REFERENCES'
+local output = input .. C.suffix
+
 --- Output path.
-local output_path = G.path(folder, output)
+local output_path = F.path(folder, output)
 
 --- Content of the original tex file.
 local texcode = pl_file.read(input_path)
@@ -146,10 +148,8 @@ local function select_bibliography(tex)
 	local bib = tex:match(s)
 	assert(bib, 'No bibliography found.')
 	-- Remove comments.
-	bib = G.remove_comments(bib)
+	bib = F.remove_comments(bib)
 	-- Save the argument of \begin{thebibliography}, usually "{9}" or "{99}".
-	-- TODO unused argument
--- 	local bib_argument = bib:match('^(.-)\\bibitem')
 	return bib
 end
 
@@ -196,18 +196,14 @@ local function mref_bibliography()
 		replace('\\newblock', ' ')
 		replace('[%s\t]+', '%%20')
 		-- Send entry to www.ams.org/mathscinet-mref.
-		local MRef_response_path = G.path(folder, 'MRef_response.html')
-		-- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
-		local url = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref='
-		G.execute('Check MathSciNet ' .. i, true,
-			'wget',
-			' --no-check-certificate',
-			' -O ', MRef_response_path,
-			' ', G.quote_outer(url .. G.quote_inner(bibitem)),
-			' 2>&1'
+		local MRef_response_path = F.path(folder, C.mref.response)
+		F.execute('Check MathSciNet ' .. i, true,
+			'wget', ' --no-check-certificate', ' -O ', MRef_response_path,
+			' ', F.quote_outer(C.mref.url .. F.quote_inner(bibitem)), ' 2>&1'
 		)
 		-- Read TEX code (if any) from MRef_response_path.
 		local MRef_response = pl_file.read(MRef_response_path)
+    os.remove(MRef_response_path)
 		if MRef_response:find('%* Matched %*') then
 			-- match found
 			local new_entry = MRef_response:match('<pre>(.-)</pre>')
@@ -226,10 +222,8 @@ local function mref_bibliography()
 				.. ' NOTE = {' .. original .. '},\n}'
 		  table.insert(unmatched_labels, labels[i])
     end
-		-- Remove MRef_response_path.
-		os.remove(MRef_response_path)
 	end
-	G.write_file(output_path .. '.bib', table.concat(tab, '\n\n'))
+	F.write_file(output_path .. '.bib', table.concat(tab, '\n\n'))
 end
 
 --- Create output bbl file.
@@ -247,9 +241,9 @@ local function create_bbl_output()
 	-- Write new tex file.
 	local tex_path = output_path .. '.tex'
 	print(folder)
-  G.write_file(tex_path, table.concat(t, '\n'))
+  F.write_file(tex_path, table.concat(t, '\n'))
 	-- Compile it.
-	G.execute('LaTeX', true,
+	F.execute('LaTeX', true,
 		'latex',
 		' -interaction=nonstopmode',
 		' -halt-on-error',
@@ -259,7 +253,7 @@ local function create_bbl_output()
 	)
 	-- Run bibtex.
 	lfs.chdir(folder)
-	G.execute('BibTeX', true, 'bibtex ', output)
+	F.execute('BibTeX', true, 'bibtex ', output)
 end
 
 --- For each critical case, add the original \bibitem
@@ -281,7 +275,7 @@ local function add_critical_entries()
 		end
 		-- Extract label.
 		local label = critical_entries[i]:match('\\bibitem%b{}')
-		local escaped_label = G.escape_lua_pattern(label)
+		local escaped_label = F.escape_lua_pattern(label)
 		-- Paste original entry.
 		table.insert(new, '\n' .. label)
 		bib = bib:gsub(escaped_label, table.concat(new, '\n'))
@@ -290,7 +284,7 @@ local function add_critical_entries()
   for i = 1, #unmatched_labels do
     local old = {
       '\\bibitem[%%\n%s]*{',
-      G.escape_lua_pattern(unmatched_labels[i]),
+      F.escape_lua_pattern(unmatched_labels[i]),
       '}'    
     }
     local new = {
@@ -300,7 +294,7 @@ local function add_critical_entries()
     bib = bib:gsub(table.concat(old), table.concat(new))
   end
 	-- Overwrite bbl file.
-	G.write_file(bbl_path, bib)
+	F.write_file(bbl_path, bib)
 end
 
 -- ******
