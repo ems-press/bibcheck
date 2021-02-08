@@ -3,7 +3,7 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.9.2 (2021-02-08)
+-- @release 0.9.3 (2021-02-08)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
@@ -11,11 +11,10 @@
 --
 -- >> lua bibcheck.lua FILENAME.tex BSTFILENAME
 -- Examples:
--- >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
+-- >> lua C:\tools\bibcheck\bibcheck.lua main.tex jems
 -- >> lua C:\tools\bibcheck\bibcheck.lua paper\main.tex amsplain
 
 local lfs = require 'lfs'
-local pl_file = require 'pl.file'
 
 -- Add path of main file to package path.
 local path = arg[0]
@@ -50,8 +49,11 @@ lfs.chdir(folder)
 local output = input .. C.suffix
 
 --- Content of the original tex file.
-local texcode = pl_file.read(input .. '.tex')
+local texcode = F.read_file(input .. '.tex')
 
+--- Bibliography in original tex file and its revised version.
+local old_bibl = false
+local new_bibl = false
 --- All \bibitem labels.
 local labels = {}
 --- All critical cases.
@@ -146,18 +148,6 @@ local function critical_entry(orig, match)
 	return false
 end
 
---- Select the bibliography and remove LaTeX comments.
--- @tparam string tex TeX code of the bibliography
--- @treturn string bib bibliography
-local function select_bibliography(tex)
-	local s = '\\begin%s*{thebibliography}(.-)\\end%s*{thebibliography}'
-	local bib = tex:match(s)
-	assert(bib, 'No bibliography found.')
-	-- Remove comments.
-	bib = F.remove_comments(bib)
-	return bib
-end
-
 --- Collect all \bibitem from 'input' in a table.
 -- @tparam string str
 -- @treturn table
@@ -180,8 +170,12 @@ end
 --- Check all \bibitem against the AMS MRef database.
 local function mref_bibliography()
 	-- Select the bibliography.
-	local bib = select_bibliography(texcode)
-	-- Collect all \bibitem in a table.
+ 	local s = '(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})'
+	old_bibl = texcode:match(s)
+	assert(old_bibl, 'No bibliography found.')
+  -- Remove comments.
+	local bib = F.remove_comments(old_bibl)
+  -- Collect all \bibitem in a table.
 	local tab = split_at_bibitem(bib)
 	-- Process each \bibitem.
 	for i = 1, #tab do
@@ -206,7 +200,7 @@ local function mref_bibliography()
 			' ', F.quote_outer(C.mref.url .. F.quote_inner(bibitem)), ' 2>&1'
 		)
 		-- Read TEX code (if any) from file 'C.mref.response'.
-		local MRef_response = pl_file.read(C.mref.response)
+		local MRef_response = F.read_file(C.mref.response)
     os.remove(C.mref.response)
 		if MRef_response:find('%* Matched %*') then
 			-- match found
@@ -252,16 +246,14 @@ local function create_bbl_output()
     texname, ' 2>&1'
 	)
 	-- Run bibtex.
-	lfs.chdir(folder)
 	F.execute('BibTeX', true, 'bibtex ', output)
 end
 
 --- For each critical case, add the original \bibitem
 -- to the bbl file (as a comment).
 local function add_critical_entries()
-	local bblname = output .. '.bbl'
 	-- Read content of the bbl file.
-	local bib = pl_file.read(bblname)
+	new_bibl = F.read_file(output .. '.bbl')
 	-- Paste each critical \bibitem into the new bibliography.
 	for i = 1, #critical_entries do
 		-- Add % at the beginning of each line.
@@ -275,26 +267,38 @@ local function add_critical_entries()
 		end
 		-- Extract label.
 		local label = critical_entries[i]:match('\\bibitem%b{}')
-		local escaped_label = F.escape_lua_pattern(label)
+		local escaped_label = F.escape_lua(label)
 		-- Paste original entry.
 		table.insert(new, '\n' .. label)
-		bib = bib:gsub(escaped_label, table.concat(new, '\n'))
+		new_bibl = new_bibl:gsub(escaped_label, table.concat(new, '\n'))
 	end
   -- Mark each unmatched \bibitem.
   for i = 1, #unmatched_labels do
     local old = {
       '\\bibitem[%%\n%s]*{',
-      F.escape_lua_pattern(unmatched_labels[i]),
+      F.escape_lua(unmatched_labels[i]),
       '}'    
     }
     local new = {
       '%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
       '\\bibitem{', unmatched_labels[i], '}'      
     }
-    bib = bib:gsub(table.concat(old), table.concat(new))
+    new_bibl = new_bibl:gsub(table.concat(old), table.concat(new))
   end
 	-- Overwrite bbl file.
-	F.write_file(bblname, bib)
+	F.write_file(output .. '.bbl', new_bibl)
+end
+
+--- Create output tex file.
+local function create_tex_output()
+	-- Escape Lua patterns in search string.
+	local s = F.escape_lua(old_bibl)
+	-- Escape percent character in replacement string.
+  local r = new_bibl:gsub('%%', '%%%%')
+	-- Replace original bibliography with modified one.
+	local out = texcode:gsub(s, r, 1)
+	-- Overwrite tex file.
+	F.write_file(output .. '.tex', out)
 end
 
 -- ******
@@ -303,21 +307,21 @@ end
 -- For each \bibitem there is either
 -- (a) a match,
 -- (b) no match or
--- (c) a match but there is a suspicion that the match is incorrect
--- ("critical case").
+-- (c) a match but there is a suspicion that the match is incorrect ("critical case").
 -- Collect all entries in a bib file.
 
 mref_bibliography()
 
 -- ******
 -- STEP 2:
--- (a) Create a temporary tex file with nothing more than
--- \nocite{*} and \bibliography{BIB FILE}.
+-- (a) Create a temporary tex file with nothing more than \nocite{*} and \bibliography{BIB FILE}.
 -- (b) Run latex and bibtex to create a bbl file.
 -- (c) For each critical case, add the original \bibitem to the bbl file (as a comment).
+-- (d) Replace the bibliography in the original tex file by the new bibliography.
 
 create_bbl_output()
 add_critical_entries()
+create_tex_output()
 
 -- ******
 -- STEP 3:
@@ -329,7 +333,6 @@ local rm_ext = {
 	'.blg',
 	'.dvi',
 	'.log',
-	'.tex'
 }
 for i = 1, #rm_ext do
 	os.remove(output .. rm_ext[i])

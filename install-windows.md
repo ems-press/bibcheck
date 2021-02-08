@@ -1,5 +1,5 @@
 Simon Winter [winter@ems.press] 
-2021-02-07
+2021-02-08
 
 # How to install bibcheck on Windows
 
@@ -9,11 +9,13 @@ Simon Winter [winter@ems.press]
 
 ## Create file 'bibcheck.bat'
 * Create, using any text editor, a file 'bibcheck.bat' in the bibcheck folder.
-* Paste the 3 lines geiven below into the file. "C:\...\bibcheck.lua" is the full path of bibcheck.lua.
+* Paste the 3 lines given below into the file. 
+  "C:\...\bibcheck.lua" is the full path of bibcheck.lua.
+  'jems' is the name of the bst file. Could also be 'amsplain' etc.
 * Create a desktop shortcut of that batch file.
 
 @echo off
-lua "C:\...\bibcheck.lua" %~f1
+lua "C:\...\bibcheck.lua" %~f1 jems
 pause
 
 ## Install Lua
