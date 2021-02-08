@@ -6,7 +6,7 @@ local M = {}
 M.bibstyle = 'amsplain'
 
 --- Output file suffix.
-M.suffix = '-BIB'
+M.suffix = '_BIB'
 
 --- MRef settings.
 M.mref = {

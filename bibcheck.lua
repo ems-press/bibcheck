@@ -3,20 +3,25 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.9.1 (2021-02-08)
+-- @release 0.9.2 (2021-02-08)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
 --   Linux + Lua 5.4.2
 --
 -- >> lua bibcheck.lua FILENAME.tex BSTFILENAME
+-- Examples:
+-- >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
+-- >> lua C:\tools\bibcheck\bibcheck.lua paper\main.tex amsplain
 
+local lfs = require 'lfs'
+local pl_file = require 'pl.file'
+
+-- Add path of main file to package path.
 local path = arg[0]
 path = path:gsub('(.-)bibcheck.lua$', '%1')
 package.path = path .. '?.lua;' .. package.path
 
-local lfs = require 'lfs'
-local pl_file = require 'pl.file'
 local F = require 'functions'
 local C = require 'config'
 
@@ -36,15 +41,17 @@ else
 	input = input_path:match(texpattern)
 end
 assert(input, 'File name not recognized.')
+-- Save current working directory.
+local cwd = lfs.currentdir()
+-- Change to folder of input file.
+lfs.chdir(folder)
 
 --- Name for all (temporary and final) files created by this script.
 local output = input .. C.suffix
 
---- Output path.
-local output_path = F.path(folder, output)
-
 --- Content of the original tex file.
-local texcode = pl_file.read(input_path)
+local texcode = pl_file.read(input .. '.tex')
+
 --- All \bibitem labels.
 local labels = {}
 --- All critical cases.
@@ -143,13 +150,11 @@ end
 -- @tparam string tex TeX code of the bibliography
 -- @treturn string bib bibliography
 local function select_bibliography(tex)
-	-- return s (= original bibliography string if tex is not modified)
 	local s = '\\begin%s*{thebibliography}(.-)\\end%s*{thebibliography}'
 	local bib = tex:match(s)
 	assert(bib, 'No bibliography found.')
 	-- Remove comments.
 	bib = F.remove_comments(bib)
-	-- Save the argument of \begin{thebibliography}, usually "{9}" or "{99}".
 	return bib
 end
 
@@ -196,14 +201,13 @@ local function mref_bibliography()
 		replace('\\newblock', ' ')
 		replace('[%s\t]+', '%%20')
 		-- Send entry to www.ams.org/mathscinet-mref.
-		local MRef_response_path = F.path(folder, C.mref.response)
 		F.execute('Check MathSciNet ' .. i, true,
-			'wget', ' --no-check-certificate', ' -O ', MRef_response_path,
+			'wget', ' --no-check-certificate', ' -O ', C.mref.response,
 			' ', F.quote_outer(C.mref.url .. F.quote_inner(bibitem)), ' 2>&1'
 		)
-		-- Read TEX code (if any) from MRef_response_path.
-		local MRef_response = pl_file.read(MRef_response_path)
-    os.remove(MRef_response_path)
+		-- Read TEX code (if any) from file 'C.mref.response'.
+		local MRef_response = pl_file.read(C.mref.response)
+    os.remove(C.mref.response)
 		if MRef_response:find('%* Matched %*') then
 			-- match found
 			local new_entry = MRef_response:match('<pre>(.-)</pre>')
@@ -223,7 +227,7 @@ local function mref_bibliography()
 		  table.insert(unmatched_labels, labels[i])
     end
 	end
-	F.write_file(output_path .. '.bib', table.concat(tab, '\n\n'))
+	F.write_file(output .. '.bib', table.concat(tab, '\n\n'))
 end
 
 --- Create output bbl file.
@@ -239,17 +243,13 @@ local function create_bbl_output()
 		'\\end{document}'
 	}
 	-- Write new tex file.
-	local tex_path = output_path .. '.tex'
-	print(folder)
-  F.write_file(tex_path, table.concat(t, '\n'))
-	-- Compile it.
+	local texname = output .. '.tex'
+  F.write_file(texname, table.concat(t, '\n'))
+  -- Compile it.
 	F.execute('LaTeX', true,
-		'latex',
-		' -interaction=nonstopmode',
-		' -halt-on-error',
-    ' -output-directory=', folder,
-    ' ', tex_path,
-		' 2>&1'
+		'latex -interaction=nonstopmode -halt-on-error ',
+    -- '-output-directory=', folder, ' ',
+    texname, ' 2>&1'
 	)
 	-- Run bibtex.
 	lfs.chdir(folder)
@@ -259,9 +259,9 @@ end
 --- For each critical case, add the original \bibitem
 -- to the bbl file (as a comment).
 local function add_critical_entries()
-	local bbl_path = output_path .. '.bbl'
+	local bblname = output .. '.bbl'
 	-- Read content of the bbl file.
-	local bib = pl_file.read(bbl_path)
+	local bib = pl_file.read(bblname)
 	-- Paste each critical \bibitem into the new bibliography.
 	for i = 1, #critical_entries do
 		-- Add % at the beginning of each line.
@@ -294,7 +294,7 @@ local function add_critical_entries()
     bib = bib:gsub(table.concat(old), table.concat(new))
   end
 	-- Overwrite bbl file.
-	F.write_file(bbl_path, bib)
+	F.write_file(bblname, bib)
 end
 
 -- ******
@@ -332,7 +332,11 @@ local rm_ext = {
 	'.tex'
 }
 for i = 1, #rm_ext do
-	os.remove(output_path .. rm_ext[i])
+	os.remove(output .. rm_ext[i])
 end
+
+-- Change back to current working directory.
+lfs.chdir(cwd)
+
 
 -- End of file.

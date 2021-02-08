@@ -40,9 +40,11 @@ pause
 
 ## Case 1: The tex file contains \begin{thebibliography}
 * Open the Windows Command Shell, go to the paper's directory and write
-    >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME
-    e.g.
-    >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
+  >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME
+  
+* You may add a path to the tex file (use backslahes; no leading backslash):     
+  >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
+  >> lua C:\tools\bibcheck\bibcheck.lua paper\main.tex amsplain
     
   Alternatively, use bibcheck.bat: Drag and drop the tex file onto its desktop shortcut.
 * Open one of the files FILENAME-REFERENCES.bbl or FILENAME-REFERENCES.tex. 

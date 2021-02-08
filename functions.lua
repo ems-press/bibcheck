@@ -26,6 +26,7 @@ do
 		['+'] = '%+';
 		['-'] = '%-';
 		['?'] = '%?';
+    ['\0'] = '%z';
 	}
 	G.escape_lua_pattern = function(str)
 		return (str:gsub('.', matches))
