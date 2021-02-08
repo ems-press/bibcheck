@@ -42,26 +42,25 @@ pause
 
 ## Case 1: The tex file contains \begin{thebibliography}
 * Open the Windows Command Shell, go to the paper's directory and write
-  >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME
+  >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME [alpha]
   
-* You may add a path to the tex file (use backslahes; no leading backslash):     
-  >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
-  >> lua C:\tools\bibcheck\bibcheck.lua paper\main.tex amsplain
+  Important: You must use a bst file that creates alphabetic labels! However, those
+  alphabetic labels are replaced by numeric ones, unless you use the parameter 'alpha'.
+  You may add a path to the tex file (use backslahes; no leading backslash).
+  
+  >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsalpha
+  >> lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha alpha
     
   Alternatively, use bibcheck.bat: Drag and drop the tex file onto its desktop shortcut.
 * Open one of the files FILENAME-REFERENCES.bbl or FILENAME-REFERENCES.tex. 
-  It contains three kind of \bibitem:
+  It contains two kinds of \bibitem:
   (a) UNMATCHED ENTRY. 
-      There was no match in MathSciNet.
-      Format this entry and sort it in the bibliography according to the known criteria. 
-  (b) CRITICAL MATCH.
-      Compare the match with the original \bibitem which is added in %.
-  (c) MATCH.
-      With all other entries (hopefully the majority) there were no problems. 
-    
+      If there is no match in MathSciNet, format the original \bitem and 
+      sort it in the bibliography according to the known criteria. 
+  (b) MATCH.
+      A few matches are unfortunately incorrect. So compare each 'match' with the original 
+      \bibitem which is added in comments.
+          
 ## Case 2: The tex file uses a bib file.
 * Run bibtex and copy the bbl content into the tex file.
 * Proceed as in CASE 1.
-
-NOTA BENE: bibcheck removes optional aruments of \bibitem!
-I.e., \bibitem[Bredon 1972]{Bre} is replaced by \bibitem{Bre}.
