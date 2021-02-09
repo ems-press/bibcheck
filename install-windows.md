@@ -15,7 +15,7 @@ Simon Winter [winter@ems.press]
 * Create a desktop shortcut of that batch file.
 
 @echo off
-lua "C:\...\bibcheck.lua" %~f1 jems
+lua "C:\...\bibcheck.lua" %~f1 emsjems
 pause
 
 ## Install Lua
@@ -42,7 +42,7 @@ pause
 
 ## Case 1: The tex file contains \begin{thebibliography}
 * Open the Windows Command Shell, go to the paper's directory and write
-  >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME [alpha]
+  >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME
   
   You may add a path to the tex file (use backslahes; no leading backslash).
   >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain

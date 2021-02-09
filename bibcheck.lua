@@ -3,7 +3,7 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.9.5 (2021-02-09)
+-- @release 0.9.6 (2021-02-09)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
@@ -340,6 +340,7 @@ local rm_ext = {
 	'.blg',
 	'.dvi',
 	'.log',
+  '.bbl',
 }
 for i = 1, #rm_ext do
 	os.remove(output .. rm_ext[i])
@@ -347,6 +348,5 @@ end
 
 -- Change back to current working directory.
 lfs.chdir(cwd)
-
 
 -- End of file.

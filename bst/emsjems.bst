@@ -2,7 +2,7 @@
 %% This is file `emsjems.bst',
 %% generated with the docstrip utility.
 %%
-%% Simon Winter: some changes marked with %*%
+%% Simon Winter: All changes marked with %*%
 %%
 %% The original source files were:
 %%
@@ -50,6 +50,8 @@ ENTRY
     journal
     key
     month
+%*% NEW:
+    mrnumber
     note
     number
     organization
@@ -105,11 +107,26 @@ FUNCTION {output.check}
     'output.nonnull
   if$
 }
+
+%*% NEW:
+FUNCTION {output.nonempty.mrnumber}
+{ duplicate$ missing$
+    { pop$ "" }
+    'skip$
+  if$
+  duplicate$ empty$
+    'pop$
+    { " \MR{" swap$ * "}" * write$ }
+  if$
+}
+
 FUNCTION {fin.entry}
 { duplicate$ empty$
     'pop$
     'write$
   if$
+  %*% NEW:
+  mrnumber output.nonempty.mrnumber
   newline$
 }
 
@@ -591,7 +608,7 @@ FUNCTION {format.bvolume}
 { volume empty$
     { "" }
 %*%    { bbl.volume volume tie.or.space.prefix
-    { bbl.volume volume " "
+    { bbl.volume volume ""
       "volume" bibinfo.check * *
       series "series" bibinfo.check
       duplicate$ empty$ 'pop$
