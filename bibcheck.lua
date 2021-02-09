@@ -3,7 +3,7 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.9.4 (2021-02-08)
+-- @release 0.9.5 (2021-02-09)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
@@ -25,8 +25,6 @@ local C = require 'config'
 local input_path = arg[1]
 --- Bibliography style (for example, 'amsplain').
 local bst = arg[2] or C.bibstyle
---- Label style (only 'alpha' creates alphabetic labels).
-local lablestyle = arg[3] or C.labelstyle
 
 local folder, input
 local texpattern = '(.-)%.tex$'
@@ -50,16 +48,18 @@ local output = input .. C.suffix
 --- Content of the original tex file.
 local texcode = F.read_file(input .. '.tex')
 
---- Bibliography in original tex file and its revised version.
-local old_bibl = texcode:match('(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})')
-local new_bibl = false
+--- Bibliography of the original tex file.
+local old_bib = texcode:match('(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})')
+assert(old_bib, 'No bibliography found.')
+
+local new_bib = false
+local old_bib_tab = {}
+local new_bib_tab = {}
 
 --- All \bibitem labels.
 local labels = {}
---- All critical cases.
-local critical_entries = {}
---- All unmatched cases.
-local unmatched_labels = {}
+-- Table indicates if old_bib[i] is matched (true) or unmatched (false).
+local matched = {}
 
 --------------------------------------------------------------------------------
 
@@ -79,20 +79,24 @@ local function correct_bibtex(entry)
   -- when using amsalpha.bst.
   -- See https://tex.stackexchange.com/questions/134116/accents-in-bibtex
   -- Replace \" LETTER by \"{LETTER}.
-  replace('\\\"%s%s*(%a)', '\\\"{%1}')
+  replace('\\\"%s(%a)', '\\\"{%1}')
   -- Replace \"{LETTER} by {\"{LETTER}}.
   replace('\\\"{(%a)}', '{\\\"{%1}}')
 	-- Similar replacement with accents.
 	local accents = { 'c', 'H', 'k', 'r', 'u', 'v' }
 	for i = 1, #accents do
 		-- Replace \H LETTER by \H{LETTER}.
-		replace('\\'..accents[i]..'%s%s*(%a)', '\\'..accents[i]..'{%1}')
+		local s = string.format('(\\%s) (%%a)', accents[i]) -- s is of the form (\H) (%a)
+		replace(s, '%1{%2}')
     -- Replace \H{LETTER} by {\H{LETTER}}.
-    replace('\\'..accents[i]..'{(%a)}', '{\\'..accents[i]..'{%1}}')
+		local s = string.format('(\\%s){(%%a)}', accents[i]) -- s is of the form (\H){(%a)}
+		replace(s, '{%1{%2}}')
 	end
 	return entry
 end
 
+-- TODO: For the time being, we consider EACH match as critical!
+--
 --- Check if the entry is a critical case.
 -- @tparam string orig original entry
 -- @tparam string match matched entry
@@ -176,26 +180,21 @@ end
 
 --- Check all \bibitem against the AMS MRef database.
 local function mref_bibliography()
-	-- Select the bibliography.
-	assert(old_bibl, 'No bibliography found.')
-  -- Remove comments.
-	local bib = F.remove_comments(old_bibl)
-  -- Collect all \bibitem in a table.
-	local tab = split_at_bibitem(bib)
-	-- Process each \bibitem.
-	for i = 1, #tab do
-		local bibitem = tab[i]
+	-- Remove comments and collect all \bibitem in a table.
+  old_bib_tab = split_at_bibitem(F.remove_comments(old_bib))
+  -- Process each \bibitem.
+	for i = 1, #old_bib_tab do
+		local bibitem = old_bib_tab[i]
 		local function replace(s, r) bibitem = bibitem:gsub(s, r) end
 		-- Remove optional argument of \bibitem[.]{.} and spaces.
 		replace('\\bibitem[%%\n%s]*%b[][%%\n%s]*(%b{})', '\\bibitem%1')
 		replace('\\bibitem[%%\n%s]*(%b{})', '\\bibitem%1')
 		-- Remove \bibitem{.} and save the label.
 		labels[i] = bibitem:match('\\bibitem%b{}')
-		-- don't use labels[i] here because of 'magic characters' issue.
+    labels[i] = labels[i]:match('\\bibitem{(.-)}$')
+    -- don't use labels[i] here because of 'magic characters' issue.
 		replace('\\bibitem%b{}', '')
-		labels[i] = labels[i]:match('\\bibitem{(.-)}$')
-		-- Save original entry; delete leading spaces and empty lines.
-		local original = bibitem:gsub('^[\n%s]+', '')
+    local original = bibitem:gsub('^[\n%s]+', '')
 		-- Escape \newblock with space and spaces with "%20"
 		replace('\\newblock', ' ')
 		replace('[%s\t]+', '%%20')
@@ -207,29 +206,26 @@ local function mref_bibliography()
 		-- Read TEX code (if any) from file 'C.mref.response'.
 		local MRef_response = F.read_file(C.mref.response)
     os.remove(C.mref.response)
-		if MRef_response:find('%* Matched %*') then
+		local new_entry
+    if MRef_response:find('%* Matched %*') then
 			-- match found
-			local new_entry = MRef_response:match('<pre>(.-)</pre>')
+			new_entry = MRef_response:match('<pre>(.-)</pre>')
 			-- Correct some 'mistakes' in the BibTeX entry.
 			new_entry = correct_bibtex(new_entry)
 			-- Change label back to the original one.
-			tab[i] = new_entry:gsub('{MR%d+', '{' .. labels[i], 1)
-			-- *******
-      -- TODO: For the time being, we consider EACH match as critical!
-			-- *******
-      -- Check whether the entry is a critical case.
-      -- if critical_entry(original, new_entry) then
-				local s = '\\bibitem{' .. labels[i] .. '}\n' .. original
-				table.insert(critical_entries, s)
-			-- end
-		else
-			-- no match found
-			tab[i] = '@misc {' .. labels[i] .. ',\n'
-				.. ' NOTE = {' .. original .. '},\n}'
-		  table.insert(unmatched_labels, labels[i])
+			new_entry = new_entry:gsub('{MR%d+', '{' .. labels[i], 1)
+      -- Save entry as 'matched'.
+      matched[i] = true
+		else -- no match found
+			-- Remove leading spaces and empty lines from original entry
+      local t = {'@misc {', labels[i], ',\n NOTE = {', original, '},\n}'}
+      new_entry = table.concat(t, '')      
+      -- Save entry as 'unmatched'.
+      matched[i] = false
     end
+    table.insert(new_bib_tab, new_entry)    
 	end
-	F.write_file(output .. '.bib', table.concat(tab, '\n\n'))
+	F.write_file(output .. '.bib', table.concat(new_bib_tab, '\n\n'))
 end
 
 --- Create output bbl file.
@@ -257,55 +253,58 @@ local function create_bbl_output()
 	F.execute('BibTeX', true, 'bibtex ', output)
 end
 
---- For each critical case, add the original \bibitem
--- to the bbl file (as a comment).
-local function add_critical_entries()
+--- For each match, add the original \bibitem to the bbl file (as a comment).
+local function add_comments()
 	-- Read content of the bbl file.
-	new_bibl = F.read_file(output .. '.bbl')
-	-- Paste each critical \bibitem into the new bibliography.
-	for i = 1, #critical_entries do
-		-- Add % at the beginning of each line.
-		critical_entries[i] = critical_entries[i] .. '\n'
-		local new = {}
-		-- table.insert(new, '%%%% COMPARE MATCH WITH ORIGINAL \\bibitem:')
-		for line in critical_entries[i]:gmatch('(.-)\n') do
-			if not line:find('^%c*$') then
-				table.insert(new, '%%' .. line)
-			end
-		end
-		-- Extract label incl. { }.
-		local label = critical_entries[i]:match('\\bibitem(%b{})')
-    local escaped_label = F.escape_lua(label)
-		-- Paste original entry.
-		new_bibl = new_bibl:gsub(
-      '\\bibitem(%b[])'..escaped_label, 
-      table.concat(new, '\n')..'\n\\bibitem%1'..label
-    )
+	new_bib = F.read_file(output .. '.bbl')
+	-- Does the bst file create alphabetic or numeric labels?
+  local alphabetic = new_bib:find('\\bibitem%b[]')
+  for i = 1, #matched do
+	  if matched[i] then		
+      -- Add % at the beginning of each line.
+		  local bibitem = old_bib_tab[i] .. '\n'
+		  local new = {}
+		  for line in bibitem:gmatch('(.-)\n') do
+  			if not line:find('^%c*$') then
+	  			table.insert(new, '%% ' .. line)
+			  end
+		  end
+      -- Paste original entry.
+      if alphabetic then
+		    new_bib = new_bib:gsub(
+        '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}', 
+        table.concat(new, '\n')..'\n\\bibitem%1{'..labels[i]..'}')
+      else
+		    new_bib = new_bib:gsub(
+        '\\bibitem{'..F.escape_lua(labels[i])..'}', 
+        table.concat(new, '\n')..'\n\\bibitem{'..labels[i]..'}')
+      end
+    else -- unmatched entry
+      if alphabetic then
+        new_bib = new_bib:gsub(
+          '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}',
+          '%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n'..
+          '\\bibitem%1{'..labels[i]..'}')
+      else  
+        new_bib = new_bib:gsub(
+          '\\bibitem{'..F.escape_lua(labels[i])..'}',
+          '%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n'..
+          '\\bibitem{'..labels[i]..'}')
+      end
+    end
 	end
-  -- Mark each unmatched \bibitem.
-  for i = 1, #unmatched_labels do
-    new_bibl = new_bibl:gsub(
-      '\\bibitem(%b[]){'..F.escape_lua(unmatched_labels[i])..'}',
-      '%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n'..
-      '\\bibitem%1{'..unmatched_labels[i]..'}'
-    )
-  end
-  -- Change the label style.
-  if lablestyle~='alpha' then
-    new_bibl = new_bibl:gsub('\\bibitem%b[]', '\\bibitem')
-  end
-	-- Overwrite bbl file.
-	F.write_file(output .. '.bbl', new_bibl)
+  -- Overwrite bbl file.
+	F.write_file(output .. '.bbl', new_bib)
 end
 
 --- Create output tex file.
 local function create_tex_output()
 	-- Escape Lua patterns in search string.
-	local s = F.escape_lua(old_bibl)
+	local s = F.escape_lua(old_bib)
 	-- Remove \providecommand{\bysame} etc. from replacement string.
-  new_bibl = new_bibl:match('(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})')
+  new_bib = new_bib:match('(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})')
   -- Escape percent character in replacement string.
-  local r = new_bibl:gsub('%%', '%%%%')
+  local r = new_bib:gsub('%%', '%%%%')
 	-- Replace original bibliography with modified one.
 	local out = texcode:gsub(s, r, 1)
 	-- Overwrite tex file.
@@ -315,10 +314,7 @@ end
 -- ******
 -- STEP 1:
 -- Check all \bibitem against the AMS MRef database.
--- For each \bibitem there is either
--- (a) a match,
--- (b) no match or
--- (c) a match but there is a suspicion that the match is incorrect ("critical case").
+-- For each \bibitem there is either a match or no match.
 -- Collect all entries in a bib file.
 
 mref_bibliography()
@@ -327,12 +323,11 @@ mref_bibliography()
 -- STEP 2:
 -- (a) Create a temporary tex file with nothing more than \nocite{*} and \bibliography{BIB FILE}.
 -- (b) Run latex and bibtex to create a bbl file.
--- (c) For each critical case, add the original \bibitem to the bbl file (as a comment).
--- (d) Change the label style.
--- (e) Replace the bibliography in the original tex file by the new bibliography.
+-- (c) For each match, add the original \bibitem to the bbl file (as a comment).
+-- (d) Replace the bibliography in the original tex file by the new bibliography.
 
 create_bbl_output()
-add_critical_entries()
+add_comments()
 create_tex_output()
 
 -- ******
@@ -340,7 +335,7 @@ create_tex_output()
 -- Remove all temporary files.
 
 local rm_ext = {
- 	'.bib',
+  '.bib',
 	'.aux',
 	'.blg',
 	'.dvi',

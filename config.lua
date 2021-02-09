@@ -5,9 +5,6 @@ local M = {}
 --- Default bibstyle.
 M.bibstyle = 'amsalpha'
 
---- Default label style.
-M.labelstyle = 'num'
-
 --- Output file suffix.
 M.suffix = '_bibchecked'
 

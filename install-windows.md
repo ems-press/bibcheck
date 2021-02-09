@@ -44,12 +44,10 @@ pause
 * Open the Windows Command Shell, go to the paper's directory and write
   >> lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME [alpha]
   
-  Important: You must use a bst file that creates alphabetic labels! However, those
-  alphabetic labels are replaced by numeric ones, unless you use the parameter 'alpha'.
   You may add a path to the tex file (use backslahes; no leading backslash).
-  
-  >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsalpha
-  >> lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha alpha
+  >> lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
+  >> lua C:\tools\bibcheck\bibcheck.lua main.tex emsjems
+  >> lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha
     
   Alternatively, use bibcheck.bat: Drag and drop the tex file onto its desktop shortcut.
 * Open one of the files FILENAME-REFERENCES.bbl or FILENAME-REFERENCES.tex. 
