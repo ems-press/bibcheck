@@ -3,6 +3,7 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with %*%
+%% Last changes: 2021/02/16
 %%
 %% The original source files were:
 %%
@@ -50,8 +51,7 @@ ENTRY
     journal
     key
     month
-%*% NEW:
-    mrnumber
+    mrnumber %*% NEW:
     note
     number
     organization
@@ -77,7 +77,28 @@ STRINGS { s t}
 FUNCTION {output.nonnull}
 { 's :=
   output.state mid.sentence =
-    { ", " * write$ }
+    { ", " * write$ } %*% NEW:
+    { output.state after.block =
+        { add.period$ write$
+          newline$
+          "\newblock " write$
+        }
+        { output.state before.all =
+            'write$
+            { add.period$ " " * write$ }
+          if$
+        }
+      if$
+      mid.sentence 'output.state :=
+    }
+  if$
+  s
+}
+%*% NEW:
+FUNCTION {output.nonnull.period}
+{ 's :=
+  output.state mid.sentence =
+    { ". " * write$ }
     { output.state after.block =
         { add.period$ write$
           newline$
@@ -100,6 +121,13 @@ FUNCTION {output}
     'output.nonnull
   if$
 }
+%*% NEW:
+FUNCTION {output.period}
+{ duplicate$ empty$
+    'pop$
+    'output.nonnull.period
+  if$
+}
 FUNCTION {output.check}
 { 't :=
   duplicate$ empty$
@@ -107,7 +135,14 @@ FUNCTION {output.check}
     'output.nonnull
   if$
 }
-
+%*% NEW:
+FUNCTION {output.check.period}
+{ 't :=
+  duplicate$ empty$
+    { pop$ "empty " t * " in " * cite$ * warning$ }
+    'output.nonnull.period
+  if$
+}
 %*% NEW:
 FUNCTION {output.nonempty.mrnumber}
 { duplicate$ missing$
@@ -125,8 +160,7 @@ FUNCTION {fin.entry}
     'pop$
     'write$
   if$
-  %*% NEW:
-  mrnumber output.nonempty.mrnumber
+  mrnumber output.nonempty.mrnumber %*% NEW
   newline$
 }
 
@@ -272,7 +306,7 @@ FUNCTION {bbl.nr}
 { "no." }
 
 FUNCTION {bbl.in}
-{ "in" }
+{ "In" } %*% NEW
 
 FUNCTION {bbl.pages}
 { "pp." }
@@ -607,7 +641,7 @@ FUNCTION {either.or.check}
 FUNCTION {format.bvolume}
 { volume empty$
     { "" }
-%*%    { bbl.volume volume tie.or.space.prefix
+%*%   { bbl.volume volume tie.or.space.prefix
     { bbl.volume volume ""
       "volume" bibinfo.check * *
       series "series" bibinfo.check
@@ -922,7 +956,7 @@ FUNCTION {article}
     {
       journal
       "journal" bibinfo.check
-      "journal" output.check
+      "journal" output.check.period %*% NEW
       add.blank
       format.vol.num.pages output
       format.date "year" output.check
@@ -950,8 +984,8 @@ FUNCTION {book}
   if$
   format.btitle "title" output.check
   crossref missing$
-    { format.bvolume output
-      format.number.series output
+    { format.bvolume output.period %*% NEW
+      format.number.series output.period %*% NEW
       format.publisher.address output
     }
     {
@@ -1014,12 +1048,13 @@ FUNCTION {incollection}
   add.colon
   format.title "title" output.check
   crossref missing$
-    { format.in.ed.booktitle "booktitle" output.check
+    { format.in.ed.booktitle "booktitle" output.check.period %*% NEW
       format.bvolume output
-      format.chapter.pages output
+%*%       format.chapter.pages output
       format.number.series output
       format.publisher.address output
       format.edition output
+      format.chapter.pages output %*% NEW
       format.date "year" output.check
     }
     { format.incoll.inproc.crossref output.nonnull
@@ -1035,9 +1070,9 @@ FUNCTION {inproceedings}
   add.colon
   format.title "title" output.check
   crossref missing$
-    { format.in.ed.booktitle "booktitle" output.check
+    { format.in.ed.booktitle "booktitle" output.check.period %*% NEW
       format.bvolume output
-      format.pages output
+%*%      format.pages output
       format.number.series output
       publisher empty$
         { format.organization.address output }
@@ -1045,6 +1080,7 @@ FUNCTION {inproceedings}
           format.publisher.address output
         }
       if$
+      format.pages output %*% NEW:
       format.date "year" output.check
     }
     { format.incoll.inproc.crossref output.nonnull
