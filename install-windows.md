@@ -1,5 +1,5 @@
 Simon Winter [winter@ems.press] 
-2021-02-15
+2021-02-18
 
 # How to install bibcheck on Windows
 
@@ -67,4 +67,5 @@ pause
           
 ## Case 2: The tex file uses a bib file.
 * Run bibtex and copy the bbl content into the tex file.
+  Important: You must NOT use a \bibliographystyle which uses \bysame (such as 'amsplain').
 * Proceed as in CASE 1.
