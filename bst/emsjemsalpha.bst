@@ -3,7 +3,7 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/02/23
+%% Last changes: 2021/02/25
 %%
 %% The original source files were:
 %%
@@ -774,10 +774,12 @@ FUNCTION {format.in.ed.booktitle}
     {
       editor "editor" format.names.ed duplicate$ empty$ 'pop$
         {
-          " " *
           get.bbl.editor
-          "(" swap$ * "), " *
-          * swap$
+          swap$ "," *
+          " " * swap$ *
+          "(" swap$ * ")" *
+          swap$
+          " " * swap$
           * }
       if$
       word.in swap$ *
@@ -1034,7 +1036,7 @@ FUNCTION {inbook}
   if$
   format.edition output
   format.date "year" output.check
-  format.note output
+  %% format.note output %%winter
   %% format.eprint output %%winter
   fin.entry
 }
@@ -1059,7 +1061,7 @@ FUNCTION {incollection}
       format.chapter.pages output
     }
   if$
-  format.note output
+  %% format.note output %%winter
   %% format.eprint output %%winter
   fin.entry
 }
@@ -1087,7 +1089,7 @@ FUNCTION {inproceedings}
       format.pages output
     }
   if$
-  format.note output
+  %% format.note output %%winter
   %% format.eprint output %%winter
   fin.entry
 }
@@ -1204,7 +1206,7 @@ FUNCTION {proceedings}
      }
   if$
       format.date "year" output.check
-  format.note output
+  %% format.note output %%winter
   %% format.eprint output %%winter
   fin.entry
 }
