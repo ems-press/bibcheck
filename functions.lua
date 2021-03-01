@@ -64,6 +64,10 @@ end
 -- @tparam string str
 -- @treturn string enquoted string
 function M.quote_inner(str)
+  if not win then
+    -- escape quote 
+    str = str:gsub("'", "'\\''")
+  end
 	local inner = (win) and '\'' or "\""
 	return inner .. str .. inner
 end
@@ -72,6 +76,10 @@ end
 -- @tparam string str
 -- @treturn string enquoted string
 function M.quote_outer(str)
+  if not win then
+    -- escape quote 
+    str = str:gsub('"', '\"')
+  end
 	local outer = (win) and '\"' or "\'"
 	return outer .. str .. outer
 end

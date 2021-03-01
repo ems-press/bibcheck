@@ -9,7 +9,7 @@
 %%
 %% merlin.mbs  (with options: `nm-init,ed-au,yr-par,xmth,thtit-a,vol-bf,vnum-x,volp-com,num-xser,numser,ser-vol,jnm-x,bkpg-x,edpar,blk-tit,au-col,in-col,fin-bare,pp,ed,abr,ednx,xedn,jabr,varand,and-xcom,etal-xc,eprint,url,url-nt,nfss,')
 %% ----------------------------------------
-%% *** European Mathematical Society Magazine ***
+%% *** Revista Matemática Iberoamericana: numerical labels ***
 %%
 %% Copyright 1994-2011 Patrick W Daly
  % ===============================================================
@@ -411,7 +411,7 @@ FUNCTION {format.names}
   numnames 'namesleft :=
     { namesleft #0 > }
     { s nameptr
-      "{f.~}{vv~}{ll}{, jj}"
+      "{vv~}{ll}{, jj}{, f.}" %%winter
       format.name$
       bibinfo bibinfo.check
       't :=
