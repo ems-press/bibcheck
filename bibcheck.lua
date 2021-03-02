@@ -3,7 +3,7 @@
 -- @author Simon Winter [winter@ems.press]
 -- @author Tobias Werner [werner@wissat-pc.de]
 --
--- @release 0.9.6 (2021-02-09)
+-- @release 0.9.7 (2021-03-02)
 
 -- tested on
 --   Windows 10 + Lua 5.1.5
@@ -85,11 +85,12 @@ local function correct_bibtex(entry)
 	-- Similar replacement with accents.
 	local accents = { 'c', 'H', 'k', 'r', 'u', 'v' }
 	for i = 1, #accents do
-		-- Replace \H LETTER by \H{LETTER}.
-		local s = string.format('(\\%s) (%%a)', accents[i]) -- s is of the form (\H) (%a)
+		local s
+    -- Replace \H LETTER by \H{LETTER}.
+		s = string.format('(\\%s) (%%a)', accents[i]) -- s is of the form (\H) (%a)
 		replace(s, '%1{%2}')
     -- Replace \H{LETTER} by {\H{LETTER}}.
-		local s = string.format('(\\%s){(%%a)}', accents[i]) -- s is of the form (\H){(%a)}
+		s = string.format('(\\%s){(%%a)}', accents[i]) -- s is of the form (\H){(%a)}
 		replace(s, '{%1{%2}}')
 	end
 	return entry
@@ -195,13 +196,13 @@ local function mref_bibliography()
     -- don't use labels[i] here because of 'magic characters' issue.
 		replace('\\bibitem%b{}', '')
     local original = bibitem:gsub('^[\n%s]+', '')
-		-- Escape \newblock with space and spaces with "%20"
 		replace('\\newblock', ' ')
-		replace('[%s\t]+', '%%20')
+    replace('[%s\t]+', ' ')
 		-- Send entry to www.ams.org/mathscinet-mref.
 		F.execute('Check MathSciNet ' .. i, true,
 			'wget', ' --no-check-certificate', ' -O ', C.mref.response,
-			' ', F.quote_outer(C.mref.url .. F.quote_inner(bibitem)), ' 2>&1'
+		--	' ', F.quote_outer(C.mref.url .. F.quote_inner(bibitem)), ' 2>&1'
+    	' ', F.quote(C.mref.url .. F.escapeUrl(bibitem)), ' 2>&1'
 		)
 		-- Read TEX code (if any) from file 'C.mref.response'.
 		local MRef_response = F.read_file(C.mref.response)

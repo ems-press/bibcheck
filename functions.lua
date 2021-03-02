@@ -13,7 +13,7 @@ local win = (M.sep == '\\')
 -- @tparam string str input
 -- @treturn string Lua-escaped
 do
-	local matches = {
+	local match = {
 		['^'] = '%^';
 		['$'] = '%$';
 		['('] = '%(';
@@ -29,6 +29,44 @@ do
     ['\0'] = '%z';
 	}
 	M.escape_lua = function(str)
+		return (str:gsub('.', match))
+	end
+end
+
+--- Escape all magic characters in a URL.
+-- @tparam string str input
+-- @treturn string URL-escaped
+-- @function escapeUrl
+do
+	local matches = {
+		-- RFC 3986 section 2.2 Reserved Characters (January 2005)
+		['!'] = '%21',
+		['#'] = '%23',
+		['$'] = '%24',
+		['&'] = '%26',
+		['\''] = '%27',
+		['('] = '%28',
+		[')'] = '%29',
+		['*'] = '%2A',
+		['+'] = '%2B',
+		[','] = '%2C',
+		['/'] = '%2F',
+		[':'] = '%3A',
+		[';'] = '%3B',
+		['='] = '%3D',
+		['?'] = '%3F',
+		['@'] = '%40',
+		['['] = '%5B',
+		[']'] = '%5D',
+		-- RFC 3986 section 2.3 Unreserved Characters (January 2005)
+		-- [A-Za-z0-9\-_.~] URI producers are discouraged
+		-- from percent-encoding unreserved characters.
+		-- Other characters in a URI must be percent encoded
+		-- (which is probably done mostly by wget).
+		[' '] = '+',
+		['"'] = '%22'
+	}
+	M.escapeUrl = function(str)
 		return (str:gsub('.', matches))
 	end
 end
@@ -60,28 +98,32 @@ function M.path(...)
 	return table.concat(t, M.sep)
 end
 
---- Create (OS-dependent) inner quotes.
--- @tparam string str
--- @treturn string enquoted string
-function M.quote_inner(str)
-  if not win then
-    -- escape quote 
-    str = str:gsub("'", "'\\''")
-  end
-	local inner = (win) and '\'' or "\""
-	return inner .. str .. inner
-end
+-- function M.quote_inner(str)
+--  if not win then
+--    str = str:gsub("'", "'\\''")
+--  end
+--	local inner = (win) and '\'' or "\""
+--	return inner .. str .. inner
+-- end
 
---- Create (OS-dependent) outer quotes.
+-- function M.quote_outer(str)
+--  if not win then
+--    str = str:gsub('"', '\"')
+--  end
+--	local outer = (win) and '\"' or "\'"
+--	return outer .. str .. outer
+-- end
+
+--- Create string literal (OS-dependent).
 -- @tparam string str
 -- @treturn string enquoted string
-function M.quote_outer(str)
-  if not win then
-    -- escape quote 
-    str = str:gsub('"', '\"')
-  end
-	local outer = (win) and '\"' or "\'"
-	return outer .. str .. outer
+function M.quote(str)
+	if not win then
+		-- escape special characters in semi-literal quote
+		str = str:gsub('(["\\$`])', '\\%1')
+	end
+	-- string literal in Windows not available?
+	return table.concat({ '"', str, '"' })
 end
 
 --- Create table from variable number of arguments.
