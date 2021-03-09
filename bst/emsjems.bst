@@ -3,7 +3,7 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/02/25
+%% Last changes: 2021/03/09
 %%
 %% The original source files were:
 %%
@@ -974,6 +974,7 @@ FUNCTION {book}
   if$
   format.btitle "title" output.check
   new.sentence %%winter
+  format.edition output %%winter
   crossref missing$
     { format.bvolume output
 %%    new.sentence %%winter
@@ -981,11 +982,10 @@ FUNCTION {book}
       format.publisher.address output
     }
     {
-  new.sentence
+      new.sentence
       format.book.crossref output.nonnull
     }
   if$
-  format.edition output
   format.date "year" output.check
   %% format.note output %%winter
   %% format.eprint output %%winter
@@ -999,9 +999,9 @@ FUNCTION {booklet}
   new.sentence
   howpublished "howpublished" bibinfo.check output
   address "address" bibinfo.check output
-  format.date output
   format.note output
   format.eprint output
+  format.date output %%winter
   fin.entry
 }
 
@@ -1123,9 +1123,9 @@ FUNCTION {manual}
     }
   if$
   format.edition output
-  format.date output
   format.note output
   format.eprint output
+  format.date output %%winter
   fin.entry
 }
 
@@ -1139,9 +1139,9 @@ FUNCTION {mastersthesis}
   bbl.mthesis format.thesis.type output.nonnull
   school "school" bibinfo.warn output
   address "address" bibinfo.check output
-  format.date "year" output.check
   format.note output
   format.eprint output
+  format.date "year" output.check %%winter
   fin.entry
 }
 
@@ -1152,9 +1152,9 @@ FUNCTION {misc}
   format.title output
   new.sentence
   howpublished "howpublished" bibinfo.check output
-  format.date output
   format.note output
   format.eprint output
+  format.date output %%winter
   fin.entry
   empty.misc.check
 }
@@ -1168,9 +1168,9 @@ FUNCTION {phdthesis}
   bbl.phdthesis format.thesis.type output.nonnull
   school "school" bibinfo.warn output
   address "address" bibinfo.check output
-  format.date "year" output.check
   format.note output
   format.eprint output
+  format.date "year" output.check %%winter
   fin.entry
 }
 
@@ -1205,7 +1205,7 @@ FUNCTION {proceedings}
       if$
      }
   if$
-      format.date "year" output.check
+  format.date "year" output.check
   %% format.note output %%winter
   %% format.eprint output %%winter
   fin.entry
@@ -1221,9 +1221,9 @@ FUNCTION {techreport}
   format.tr.number output.nonnull
   institution "institution" bibinfo.warn output
   address "address" bibinfo.check output
-  format.date "year" output.check
   format.note output
   format.eprint output
+  format.date "year" output.check %%winter
   fin.entry
 }
 
@@ -1232,9 +1232,10 @@ FUNCTION {unpublished}
   format.authors "author" output.check
   add.colon
   format.title "title" output.check
-  format.date output
+  new.sentence %%winter
   format.note "note" output.check
   format.eprint output
+  format.date output %%winter
   fin.entry
 }
 
