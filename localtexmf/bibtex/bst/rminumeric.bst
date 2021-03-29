@@ -3,7 +3,7 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/03/09
+%% Last changes: 2021/03/29
 %%
 %% The original source files were:
 %%
@@ -110,13 +110,10 @@ FUNCTION {output.check}
   if$
 }
 FUNCTION {fin.entry}
-{ duplicate$ empty$
-    'pop$
-    'write$
-  if$
+{ add.period$
+  write$
   newline$
 }
-
 FUNCTION {new.block}
 { output.state before.all =
     'skip$
@@ -135,6 +132,13 @@ FUNCTION {new.sentence}
 }
 FUNCTION {add.blank}
 {  " " * before.all 'output.state :=
+}
+
+FUNCTION {add.colon}
+{ duplicate$ empty$
+    'skip$
+    { ":" * add.blank }
+  if$
 }
 
 FUNCTION {date.block}
@@ -937,6 +941,7 @@ FUNCTION {format.organization.address}
 FUNCTION {article}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.title "title" output.check
   new.sentence
   crossref missing$
@@ -960,8 +965,10 @@ FUNCTION {book}
 { output.bibitem
   author empty$
     { format.editors "author and editor" output.check
+      add.colon
     }
     { format.authors output.nonnull
+      add.colon
       crossref missing$
         { "author and editor" editor either.or.check }
         'skip$
@@ -990,6 +997,7 @@ FUNCTION {book}
 FUNCTION {booklet}
 { output.bibitem
   format.authors output
+  add.colon
   format.title "title" output.check
   new.sentence
   howpublished "howpublished" bibinfo.check output
@@ -1004,8 +1012,10 @@ FUNCTION {inbook}
 { output.bibitem
   author empty$
     { format.editors "author and editor" output.check
+      add.colon
     }
     { format.authors output.nonnull
+      add.colon
       crossref missing$
         { "author and editor" editor either.or.check }
         'skip$
@@ -1038,6 +1048,7 @@ FUNCTION {inbook}
 FUNCTION {incollection}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.title "title" output.check
   new.sentence
   crossref missing$
@@ -1061,6 +1072,7 @@ FUNCTION {incollection}
 FUNCTION {inproceedings}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.title "title" output.check
   new.sentence
   crossref missing$
@@ -1080,7 +1092,7 @@ FUNCTION {inproceedings}
   if$
   format.date "year" output.check
   date.block
-  add.blank
+%% add.blank
 %% format.note output %%winter
 %% format.eprint output %%winter
   fin.entry
@@ -1098,6 +1110,7 @@ FUNCTION {manual}
     }
     { format.authors output.nonnull }
   if$
+  add.colon
   format.btitle "title" output.check
   new.sentence
   author empty$
@@ -1123,6 +1136,7 @@ FUNCTION {manual}
 FUNCTION {mastersthesis}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.btitle
   "title" output.check
   new.sentence
@@ -1138,6 +1152,7 @@ FUNCTION {mastersthesis}
 FUNCTION {misc}
 { output.bibitem
   format.authors output
+  add.colon
   format.title output
   new.sentence
   howpublished "howpublished" bibinfo.check output
@@ -1150,6 +1165,7 @@ FUNCTION {misc}
 FUNCTION {phdthesis}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.btitle
   "title" output.check
   new.sentence
@@ -1169,6 +1185,7 @@ FUNCTION {proceedings}
     }
     { format.editors output.nonnull }
   if$
+  add.colon
   format.btitle "title" output.check
   format.bvolume output
   editor empty$
@@ -1201,6 +1218,7 @@ FUNCTION {proceedings}
 FUNCTION {techreport}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.title
   "title" output.check
   new.sentence
@@ -1216,6 +1234,7 @@ FUNCTION {techreport}
 FUNCTION {unpublished}
 { output.bibitem
   format.authors "author" output.check
+  add.colon
   format.title "title" output.check
   format.date output
   format.note "note" output.check
