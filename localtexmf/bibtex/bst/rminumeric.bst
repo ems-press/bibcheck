@@ -3,7 +3,7 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/03/29
+%% Last changes: 2021/04/09
 %%
 %% The original source files were:
 %%
@@ -740,12 +740,21 @@ FUNCTION {format.vol.num.pages}
   if$
   bolden
   format.year *
+  number "number" bibinfo.check duplicate$ empty$ 'skip$
+    {
+      swap$ duplicate$ empty$
+        { "there's a number but no volume in " cite$ * warning$ }
+        'skip$
+      if$
+      swap$
+      ", " bbl.nr * number tie.or.space.prefix pop$ * swap$ *
+    }
+  if$ *
   eid empty$
     { format.journal.pages }
     { format.journal.eid }
   if$
 }
-
 FUNCTION {format.chapter.pages}
 { chapter empty$
     'format.pages
