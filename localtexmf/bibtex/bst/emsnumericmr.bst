@@ -1,5 +1,5 @@
 %%
-%% This is file `emsnumeric.bst',
+%% This is file `emsnumericmr.bst',
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
@@ -9,7 +9,7 @@
 %%
 %% merlin.mbs  (with options: `nm-rev,jnrlst,dt-jnl,xmth,vol-bf,vnum-x,volp-com,jdt-vs,num-xser,numser,ser-vol,jnm-x,edpar,edby,blk-tit,fin-bare,pp,ed,abr,xedn,jabr,varand,and-xcom,etal-xc,eprint,url,url-nt,nfss,')
 %% ----------------------------------------
-%% *** EMS Press bibliography style with numerical labels ***
+%% *** EMS Press bibliography style with numerical labels and MR codes ***
 %%
 %% Copyright 1994-2011 Patrick W Daly
  % ===============================================================
@@ -53,6 +53,7 @@ ENTRY
     journal
     key
     month
+    mrnumber %%winter
     note
     number
     organization
@@ -109,11 +110,21 @@ FUNCTION {output.check}
     'output.nonnull
   if$
 }
-FUNCTION {fin.entry}
-{ duplicate$ empty$
-    'pop$
-    'write$
+%%winter:
+FUNCTION {output.nonempty.mrnumber}
+{ duplicate$ missing$
+    { pop$ "" }
+    'skip$
   if$
+  duplicate$ empty$
+    'pop$
+    { " \MR{" swap$ * "}" * write$ }
+  if$
+}
+FUNCTION {fin.entry}
+{ add.period$
+  write$
+  mrnumber output.nonempty.mrnumber %%winter
   newline$
 }
 
@@ -1080,7 +1091,7 @@ FUNCTION {inproceedings}
   if$
   format.date "year" output.check
   date.block
-  add.blank
+%% add.blank
 %% format.note output %%winter
 %% format.eprint output %%winter
   fin.entry
