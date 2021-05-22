@@ -1,5 +1,5 @@
 Simon Winter [winter@ems.press] 
-2021-02-18
+2021-05-19
 
 # How to install bibcheck on Windows
 
@@ -50,20 +50,25 @@ pause
   
   You may add a path to the tex file (use backslahes; no leading backslash).
   ```
-  lua C:\tools\bibcheck\bibcheck.lua main.tex amsplain
+  lua C:\tools\bibcheck\bibcheck.lua main.tex emsnumeric
   lua C:\tools\bibcheck\bibcheck.lua main.tex emsjems
   lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha
   ```
     
   Alternatively, use bibcheck.bat: Drag and drop the tex file onto its desktop shortcut.
+  
 * Open one of the files FILENAME-REFERENCES.bbl or FILENAME-REFERENCES.tex. 
   It contains two kinds of \bibitem:
   (a) UNMATCHED ENTRY. 
-      If there is no match in MathSciNet, format the original \bitem and 
-      sort it in the bibliography according to the known criteria. 
+      If there is no match in MathSciNet, then manually format the original \bibitem
+      and sort it in the bibliography according to the known criteria. 
   (b) MATCH.
       A few matches are unfortunately incorrect. So compare each 'match' with the original 
       \bibitem which is added in comments.
+
+* To improve the result, you should first (i.e., before running 'bibcheck') replace all 
+  instances of \bysame (in the original tex file) by the respective authors.
+
           
 ## Case 2: The tex file uses a bib file.
 * Run bibtex and copy the bbl content into the tex file.

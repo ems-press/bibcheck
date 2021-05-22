@@ -10,8 +10,8 @@ local win = (M.sep == '\\')
 
 --- Escape all magic characters in a string.
 -- https://github.com/lua-nucleo/lua-nucleo/blob/v0.1.0/lua-nucleo/string.lua#L245-L267
--- @tparam string str input
--- @treturn string Lua-escaped
+-- Input: string str
+-- Output: string Lua-escaped
 do
 	local match = {
 		['^'] = '%^';
@@ -34,9 +34,8 @@ do
 end
 
 --- Escape all magic characters in a URL.
--- @tparam string str input
--- @treturn string URL-escaped
--- @function escapeUrl
+-- Input: string str
+-- Output: string URL-escaped
 do
 	local matches = {
 		-- RFC 3986 section 2.2 Reserved Characters (January 2005)
@@ -72,27 +71,26 @@ do
 end
 
 --- Create pipe and execute command.
--- @tparam string info
--- @tparam boolean log print output
--- @tparam {string,...} ... variable number of string parts
--- @treturn string output
+-- Input: string info, boolean log (print output), variable number of strings ...
+-- Output: string
 function M.execute(info, log, ...)
-	print(info .. ':\n')
-	local t = M.var_string(...)
--- 	print(table.concat(t))
-	local p = assert(io.popen(table.concat(t)))
+	if info then print(info) end
+	local t = {}
+	for i = 1, select('#', ...) do
+		t[i] = tostring((select(i, ...)))
+	end
+	local p = assert(io.popen(table.concat(t, ' ')),
+		'*** Cannot execute command. ***')
 	local out = p:read('*all')
 	p:close()
-	if log then
-		print(out)
-	end
+	if log then print(out) end
 	return out
 end
 
 --- Create (OS-dependent) path.
 -- Concatenates all given parts with the path separator.
--- @tparam {string,...} ... variable number of string parts
--- @treturn string path
+-- Input: variable number of strings ...
+-- Output: string
 function M.path(...)
 	local t = M.var_string(...)
 	return table.concat(t, M.sep)
@@ -115,8 +113,8 @@ end
 -- end
 
 --- Create string literal (OS-dependent).
--- @tparam string str
--- @treturn string enquoted string
+-- Input: string str
+-- Output: enquoted string
 function M.quote(str)
 	if not win then
 		-- escape special characters in semi-literal quote
@@ -127,8 +125,8 @@ function M.quote(str)
 end
 
 --- Create table from variable number of arguments.
--- @tparam {string,...} ... variable number of string parts
--- @treturn table
+-- Input: variable number of strings ...
+-- Output: table
 function M.var_string(...)
 	local t = {}
 	for i = 1, select('#', ...) do
@@ -138,8 +136,8 @@ function M.var_string(...)
 end
 
 --- Remove all LaTeX comments (%).
--- @tparam string text
--- @treturn string
+-- Input: string text
+-- Output: string
 function M.remove_comments(text)
 	-- N.B.: Don't delete the percent sign \%.
 	-- Since gsub('([^\\])%%.-\n', '%1\n') doesn't work with sequenced %-lines,
@@ -157,8 +155,7 @@ function M.remove_comments(text)
 end
 
 --- Write a string to a file.
--- @tparam string file path
--- @tparam string str
+-- Input: string file (path), string str
 function M.write_file(file, str)
 	str = str:gsub('\r\n', '\n')
 	pl_file.write(file, str)
