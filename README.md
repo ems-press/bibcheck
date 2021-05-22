@@ -16,11 +16,11 @@ Simon Winter [winter@ems.press]
 * Download from https://eternallybored.org/misc/wget/ the EXE file of Version 1.21 (32-bit or 64-bit).
 * Copy wget.exe to e.g. C:\Program Files (x86)\wget-1.21.1-1-win64\ or any other folder.
 * Add WGet to the PATH on Windows:
-    (1) Open the Start Search, type in "env" and choose "Edit the system environment variables" ("Systemumgebungsvariablen bearbeiten").
-    (2) Click the "Environment Variables" button ("Umgebungsvariablen").
-    (3) Under "System Variables" find the row with "Path" in the first column and click edit.
-    (4) Click "New" and type in the new path, e.g. C:\Program Files (x86)\wget-1.21.1-1-win64
-    (5) Dismiss all of the dialogs by choosing OK. Your changes are saved.
+    * Open the Start Search, type in "env" and choose "Edit the system environment variables" ("Systemumgebungsvariablen bearbeiten").
+    * Click the "Environment Variables" button ("Umgebungsvariablen").
+    * Under "System Variables" find the row with "Path" in the first column and click edit.
+    * Click "New" and type in the new path, e.g. C:\Program Files (x86)\wget-1.21.1-1-win64
+    * Dismiss all of the dialogs by choosing OK. Your changes are saved.
 * To check if the installation was successful, open a command terminal (by typing "cmd" in the search menu) and type:
 ```
 wget --help
@@ -43,10 +43,10 @@ lua C:\tools\bibcheck\bibcheck.lua main.tex emsnumeric
 lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha
 ```
 * Open the new file FILENAME_bibchecked.tex. It contains two kinds of \bibitem:
-    (1) UNMATCHED ENTRY. 
+    * UNMATCHED ENTRY. 
     If no match in MathSciNet has been found, then manually format the original \bibitem
     and sort it in the bibliography according to the known criteria. 
-    (2) MATCH.
+    * MATCH.
     Most \bibitem's have a match in MathSciNet. Unfortunately, a few of them are incorrect. 
     So compare each 'match' with the original \bibitem (which is added as a comment).
 
