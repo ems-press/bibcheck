@@ -12,8 +12,8 @@ M.printZbl = true
 M.suffix = '_bibchecked'
 
 M.remove_files = {
-  --'.bib',
-  --'.bbl',
+  '.bib',
+  '.bbl',
 	'.aux',
   '.log',
   '.dvi',
