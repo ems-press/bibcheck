@@ -1,5 +1,5 @@
 --- This is bibcheck.
--- version 0.9.8 (2021-05-22)
+-- version 0.9.8 (2021-05-24)
 
 -- authors: 
 -- Simon Winter [winter@ems.press]
@@ -68,88 +68,12 @@ local labels = {}
 local MR_matched = {}
 
 --------------------------------------------------------------------------------
--- Functions:
-
---- Correct some 'mistakes' in the BibTeX code.
--- Input: string entry
--- Output: string
-local function correct_bibtex(entry)
-	local function replace(s, r) entry = entry:gsub(s, r) end
-	replace('\\bf(%A)', '\\mathbf%1')
-	replace('\\bold(%A)', '\\mathbf%1')
-	replace('\\Bbb(%A)', '\\mathbb%1')
-	-- Enclose 'dotless i' in curly brackets.
-	replace('\\i%s', '{\\i}')
-  -- The following replacements are necessary to get proper alphabetic labels, e.g.
-  -- when using amsalpha.bst.
-  -- See https://tex.stackexchange.com/questions/134116/accents-in-bibtex
-  -- Replace \" LETTER by \"{LETTER}.
-  replace('\\\"%s(%a)', '\\\"{%1}')
-  -- Replace \"{LETTER} by {\"{LETTER}}.
-  replace('\\\"{(%a)}', '{\\\"{%1}}')
-	-- Similar replacement with accents.
-	local accents = { 'c', 'H', 'k', 'r', 'u', 'v' }
-	for i = 1, #accents do
-		local s
-    -- Replace \H LETTER by \H{LETTER}.
-		s = string.format('(\\%s) (%%a)', accents[i]) -- s is of the form (\H) (%a)
-		replace(s, '%1{%2}')
-    -- Replace \H{LETTER} by {\H{LETTER}}.
-		s = string.format('(\\%s){(%%a)}', accents[i]) -- s is of the form (\H){(%a)}
-		replace(s, '{%1{%2}}')
-	end
-	return entry
-end
-
---- Collect all \bibitem's from 'str' in a table.
--- Input: string str
--- Output: table
-local function split_at_bibitem(str)
-	-- Insert blank line before each \bibitem
-	-- and at the very end (i.e. before \end{thebibliography}).
-	str = str:gsub('\\bibitem', '\n\n\\bibitem')
-	str = str .. '\n\n'
-	local t = {}
-	for field in string.gmatch(str, '(\\bibitem.-)\n\n') do
-		table.insert(t, field)
-	end
-	return t
-end
-
---- Return some values of former JSON table from zbMATH.
--- Input: table tab
--- Output: string
-local function zbl_info(tab)
-  if tab then
-    --local ret = {}
-    --for key, value in pairs(tab) do
-    --  if key ~= 'score' and key ~= 'zbl_id' then
-    --    table.insert(ret, value) 
-    --  end  
-    --end
-    -- return '\n%%%% zbMATH:\n%% '..table.concat(ret, ' | ')
-    local ret = {tab.authors, tab.title, tab.source}
-    return '\n%%__ zbMATH:\n%% '..table.concat(ret, '; ')
-  else
-    return ''
-  end 
-end
-
-local function zbl_ID(tab)
-  if tab then
-    return '\\Zbl{'..tab.zbl_id..'}'
-  else
-    return ''
-  end 
-end
-
---------------------------------------------------------------------------------
 --- Main functions:
 
 --- Create BIB file.
 local function make_bib()
 	-- Remove comments and collect all \bibitem in a table.
-  bibitems = split_at_bibitem(F.remove_comments(old_bibl))
+  bibitems = F.split_at_bibitem(F.remove_comments(old_bibl))
   -- Process each \bibitem.
 	for i = 1, #bibitems do
     local bibitem = bibitems[i]
@@ -165,41 +89,42 @@ local function make_bib()
     local original = bibitem:gsub('^[\n%s]+', '')
 		replace('\\newblock', ' ')
     replace('[%s\t]+', ' ')
+ 		-- ******
+    -- Send entry to zbMATH.
+    local ret
+    if C.printZbl then
+      ret = F.execute('Checking zbMATH for \\bibitem '..i, false,
+        'wget -qO-', F.quote(C.database.zbl .. F.escapeUrl(bibitem)))
+      -- unpack the JSON ouput of zbMATH:
+      local function isTable(t) return t and type(t) == 'table' end
+      ret = ret and json.decode(ret)
+      ret = isTable(ret) and ret.results
+      ret = isTable(ret) and table.unpack(ret)
+    end
+    zbl_matches[i] = ret
 		-- ******
     -- Send entry to MathSciNet.
-		local returnA = F.execute('Checking MathSciNet for \\bibitem '..i, false,
+		ret = F.execute('Checking MathSciNet for \\bibitem '..i, false,
     	'wget -qO-', F.quote(C.database.mref .. F.escapeUrl(bibitem)))
 		local new_entry
-    if returnA:find('%* Matched %*') then
+    if ret:find('%* Matched %*') then
 			-- match found
-			new_entry = returnA:match('<pre>(.-)</pre>')
+			new_entry = ret:match('<pre>(.-)</pre>')
 			-- Correct some 'mistakes' in the BibTeX entry.
-			new_entry = correct_bibtex(new_entry)
+			new_entry = F.correct_bibtex(new_entry)
 			-- Change label back to the original one.
-			new_entry = new_entry:gsub('{MR%d+', '{' .. labels[i], 1)
+      local t = {'{', labels[i], ',', F.zbl_ID(zbl_matches[i])}
+			new_entry = new_entry:gsub('{MR%d+,', table.concat(t), 1)
       -- Save entry as 'matched'.
       MR_matched[i] = true
 		else -- no match found
 			-- Remove leading spaces and empty lines from original entry
-      local t = {'@misc {', labels[i], ',\n NOTE = {', original, '},\n}'}
-      new_entry = table.concat(t, '')      
+      local t = {'@misc {', labels[i], ',\n NOTE = {', original, '},', F.zbl_ID(zbl_matches[i]), '\n}'}
+      new_entry = table.concat(t)      
       -- Save entry as 'unmatched'.
       MR_matched[i] = false
     end
     table.insert(bibtex_entries, new_entry)    
- 		-- ******
-    -- Send entry to zbMATH.
-    local returnB
-    if C.printZbl then
-      returnB = F.execute('Checking zbMATH for \\bibitem '..i, false,
-        'wget -qO-', F.quote(C.database.zbl .. F.escapeUrl(bibitem)))
-      -- unpack the JSON ouput of zbMATH:
-      local function isTable(t) return t and type(t) == 'table' end
-      returnB = returnB and json.decode(returnB)
-      returnB = isTable(returnB) and returnB.results
-      returnB = isTable(returnB) and table.unpack(returnB)
-    end
-    zbl_matches[i] = returnB
   end
 	F.write_file(output .. '.bib', table.concat(bibtex_entries, '\n\n'))
 end
@@ -211,6 +136,7 @@ local function make_bbl()
 		'\\usepackage[utf8]{inputenc}',
 		'\\usepackage{amssymb}',
 		'\\newcommand\\MR[1]{MR~#1}',
+		'\\newcommand\\Zbl[1]{Zbl~#1}',    
     '\\begin{document}',
 		'\\nocite{*}',
 		'\\bibliographystyle{' .. bst .. '}',
@@ -253,24 +179,24 @@ local function add_comments()
       -- Paste original entry and zbMATH entry.
       if alphabetic then
 		    s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
-        r = {'\\bibitem%1{', labels[i], '}%2 ', zbl_ID(zbl_matches[i]),
-             '\n%%__ Original:\n', orig_bibitem, zbl_info(zbl_matches[i]), '\n\n'}
+        r = {'\\bibitem%1{', labels[i], '}%2 ',
+             '\n%%__ Original:\n', orig_bibitem, F.zbl_info(zbl_matches[i]), '\n\n'}
       else
         s = '\\bibitem{'..F.escape_lua(labels[i])..'}(.-)\n\n'
-        r = {'\\bibitem{', labels[i], '}%1 ', zbl_ID(zbl_matches[i]),
-             '\n%%__ Original:\n', orig_bibitem, zbl_info(zbl_matches[i]), '\n\n'}
+        r = {'\\bibitem{', labels[i], '}%1 ',
+             '\n%%__ Original:\n', orig_bibitem, F.zbl_info(zbl_matches[i]), '\n\n'}
       end
     else -- unmatched entry
       if alphabetic then
         s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
-             '\\bibitem%1{'..labels[i]..'}%2 ', zbl_ID(zbl_matches[i]), 
-             zbl_info(zbl_matches[i]), '\n\n'}
+             '\\bibitem%1{'..labels[i]..'}%2 ',
+             F.zbl_info(zbl_matches[i]), '\n\n'}
       else  
         s = '\\bibitem{'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
-             '\\bibitem{'..labels[i]..'}%1 ', zbl_ID(zbl_matches[i]),
-             zbl_info(zbl_matches[i]), '\n\n'}
+             '\\bibitem{'..labels[i]..'}%1 ',
+             F.zbl_info(zbl_matches[i]), '\n\n'}
       end
     end
     new_bibl = new_bibl:gsub(s, table.concat(r), 1)

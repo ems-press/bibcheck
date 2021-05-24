@@ -3,7 +3,7 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/05/19
+%% Last changes: 2021/05/24
 %%
 %% The original source files were:
 %%
@@ -66,6 +66,7 @@ ENTRY
     url
     volume
     year
+    zblnumber %%winter
   }
   {}
   { label }
@@ -121,9 +122,21 @@ FUNCTION {output.nonempty.mrnumber}
     { " \MR{" swap$ * "}" * write$ }
   if$
 }
+%%winter:
+FUNCTION {output.nonempty.zblnumber}
+{ duplicate$ missing$
+    { pop$ "" }
+    'skip$
+  if$
+  duplicate$ empty$
+    'pop$
+    { " \Zbl{" swap$ * "}" * write$ }
+  if$
+}
 FUNCTION {fin.entry}
 { add.period$
   write$
+  zblnumber output.nonempty.zblnumber %%winter
   mrnumber output.nonempty.mrnumber %%winter
   newline$
 }

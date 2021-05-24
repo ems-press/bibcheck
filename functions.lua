@@ -8,6 +8,79 @@ M.sep = package.config:sub(1, 1)
 -- TRUE if Windows, otherwise FALSE
 local win = (M.sep == '\\')
 
+--- Correct some 'mistakes' in the BibTeX code.
+-- Input: string entry
+-- Output: string
+function M.correct_bibtex(entry)
+	local function replace(s, r) entry = entry:gsub(s, r) end
+	replace('\\bf(%A)', '\\mathbf%1')
+	replace('\\bold(%A)', '\\mathbf%1')
+	replace('\\Bbb(%A)', '\\mathbb%1')
+	-- Enclose 'dotless i' in curly brackets.
+	replace('\\i%s', '{\\i}')
+  -- The following replacements are necessary to get proper alphabetic labels, e.g.
+  -- when using amsalpha.bst.
+  -- See https://tex.stackexchange.com/questions/134116/accents-in-bibtex
+  -- Replace \" LETTER by \"{LETTER}.
+  replace('\\\"%s(%a)', '\\\"{%1}')
+  -- Replace \"{LETTER} by {\"{LETTER}}.
+  replace('\\\"{(%a)}', '{\\\"{%1}}')
+	-- Similar replacement with accents.
+	local accents = { 'c', 'H', 'k', 'r', 'u', 'v' }
+	for i = 1, #accents do
+		local s
+    -- Replace \H LETTER by \H{LETTER}.
+		s = string.format('(\\%s) (%%a)', accents[i]) -- s is of the form (\H) (%a)
+		replace(s, '%1{%2}')
+    -- Replace \H{LETTER} by {\H{LETTER}}.
+		s = string.format('(\\%s){(%%a)}', accents[i]) -- s is of the form (\H){(%a)}
+		replace(s, '{%1{%2}}')
+	end
+	local matches = { ['&amp;'] = '&', ['&gt;'] = '>', ['&lt;'] = '<' }
+	for s, r in pairs(matches) do
+	  replace(s, r)
+  end
+	return entry
+end
+
+--- Collect all \bibitem's from 'str' in a table.
+-- Input: string str
+-- Output: table
+function M.split_at_bibitem(str)
+	-- Insert blank line before each \bibitem
+	-- and at the very end (i.e. before \end{thebibliography}).
+	str = str:gsub('\\bibitem', '\n\n\\bibitem')
+	str = str .. '\n\n'
+	local t = {}
+	for field in string.gmatch(str, '(\\bibitem.-)\n\n') do
+		table.insert(t, field)
+	end
+	return t
+end
+
+--- Return some values of former JSON table from zbMATH.
+-- Input: table tab
+-- Output: string
+function M.zbl_info(tab)
+  if tab then
+    local ret = {tab.authors, tab.title, tab.source}
+    return '\n%%__ zbMATH:\n%% '..table.concat(ret, '; ')
+  else
+    return ''
+  end 
+end
+
+--- Return Zbl entry for BIB file of former JSON table from zbMATH.
+-- Input: table tab
+-- Output: string
+function M.zbl_ID(tab)
+  if tab then
+    return '\nZBLNUMBER = {'..tab.zbl_id..'},'
+  else
+    return ''
+  end 
+end
+
 --- Escape all magic characters in a string.
 -- https://github.com/lua-nucleo/lua-nucleo/blob/v0.1.0/lua-nucleo/string.lua#L245-L267
 -- Input: string str
