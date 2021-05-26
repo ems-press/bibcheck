@@ -3,7 +3,7 @@
 local M = {}
 
 --- Default bibstyle.
-M.bibstyle = 'emsnumericmr'
+M.bibstyle = 'emss'
 
 --- Add zbMATH IDs?
 M.printZbl = true

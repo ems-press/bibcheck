@@ -1,5 +1,5 @@
 --- This is bibcheck.
--- version 0.9.8 (2021-05-24)
+-- version 0.9.9 (2021-05-26)
 
 -- authors: 
 -- Simon Winter [winter@ems.press]
@@ -9,7 +9,7 @@
 --  Windows 10 + Lua 5.1.5 + WGeT 1.21.1
 --  Linux + Lua 5.4.2
 
--- See file 'install-windows.md' on how to use this script.
+-- See 'README.md' on how to use this script.
 
 local lfs = require 'lfs'
 
@@ -111,7 +111,7 @@ local function make_bib()
 			-- match found
 			new_entry = ret:match('<pre>(.-)</pre>')
 			-- Correct some 'mistakes' in the BibTeX entry.
-			new_entry = F.correct_bibtex(new_entry)
+			new_entry = F.normalizeTex(new_entry)      
 			-- Change label back to the original one.
       local t = {'{', labels[i], ',', F.zbl_ID(zbl_matches[i])}
 			new_entry = new_entry:gsub('{MR%d+,', table.concat(t), 1)
@@ -252,13 +252,13 @@ add_comments()
 -- ******
 -- STEP 4:
 -- Replace the bibliography in the original TEX file by the new bibliography.
--- Remove all temporary files.
 make_tex()
-remove_temp()
 
 -- ******
 -- STEP 5:
--- Change back to current working directory.
-lfs.chdir(cwd)
+-- Remove all temporary files.
+remove_temp()
+
+lfs.chdir(cwd) -- change back to current working directory
 
 -- End of file.

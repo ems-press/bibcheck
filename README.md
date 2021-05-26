@@ -39,7 +39,7 @@ lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME
 ```
   You may add a path to the tex file (use backslahes; no leading backslash).
 ```
-lua C:\tools\bibcheck\bibcheck.lua main.tex emsnumeric
+lua C:\tools\bibcheck\bibcheck.lua main.tex emss
 lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha
 ```
 * Open the new file FILENAME_bibchecked.tex. It contains two kinds of \bibitem:
@@ -69,7 +69,7 @@ Instead of using the Command Terminal one can create and use a BAT file:
 ```
 @echo off
 chcp 65001
-lua "C:\...\bibcheck.lua" %~f1 emsnumeric
+lua "C:\...\bibcheck.lua" %~f1 emss
 pause
 ```
   Here "C:\...\bibcheck.lua" is the full path of bibcheck.lua.

@@ -11,36 +11,66 @@ local win = (M.sep == '\\')
 --- Correct some 'mistakes' in the BibTeX code.
 -- Input: string entry
 -- Output: string
-function M.correct_bibtex(entry)
-	local function replace(s, r) entry = entry:gsub(s, r) end
-	replace('\\bf(%A)', '\\mathbf%1')
-	replace('\\bold(%A)', '\\mathbf%1')
-	replace('\\Bbb(%A)', '\\mathbb%1')
-	-- Enclose 'dotless i' in curly brackets.
-	replace('\\i%s', '{\\i}')
-  -- The following replacements are necessary to get proper alphabetic labels, e.g.
-  -- when using amsalpha.bst.
-  -- See https://tex.stackexchange.com/questions/134116/accents-in-bibtex
-  -- Replace \" LETTER by \"{LETTER}.
-  replace('\\\"%s(%a)', '\\\"{%1}')
-  -- Replace \"{LETTER} by {\"{LETTER}}.
-  replace('\\\"{(%a)}', '{\\\"{%1}}')
-	-- Similar replacement with accents.
-	local accents = { 'c', 'H', 'k', 'r', 'u', 'v' }
-	for i = 1, #accents do
-		local s
-    -- Replace \H LETTER by \H{LETTER}.
-		s = string.format('(\\%s) (%%a)', accents[i]) -- s is of the form (\H) (%a)
-		replace(s, '%1{%2}')
-    -- Replace \H{LETTER} by {\H{LETTER}}.
-		s = string.format('(\\%s){(%%a)}', accents[i]) -- s is of the form (\H){(%a)}
-		replace(s, '{%1{%2}}')
+do
+	local mpattern = '{({\\%a+%s*%b{}})}'
+	local apattern = '{({\\["\'.=%^`~Hbcdkruv]%b{}})}'
+	-- escaped for string.format
+	local accents = {
+		'"', "'", '%%.', '=', '%%^', '`', '~',
+		'H', 'b', 'c', 'd', 'k', 'r', 'u', 'v'
+	}
+	-- old AMS/TeX macros
+	-- TODO if replacing \bf were safe, what about \it and \rm?
+	local map = {
+		bf = 'mathbf',
+		bold = 'mathbf',
+		Bbb = 'mathbb',
+		scr = 'mathcal',
+		germ = 'mathfrak'
+	}
+	local cbrace = {
+		'(\\[ijlLoO])%s',
+		'(\\ss)%s',
+		'(\\aa)%s', '(\\AA)%s',
+		'(\\ae)%s', '(\\AE)%s',
+		'(\\oe)%s', '(\\OE)%s',
+	}
+	function M.normalizeTex(str)
+		local function replace(s, r) str = str:gsub(s, r) end
+		for o, n in pairs(map) do
+			local s = string.format('\\%s(%%A)', o)
+			local r = string.format('\\%s%%1', n)
+			replace(s, r)
+		end
+		-- enclose some characters in braces
+		for i = 1, #cbrace do replace(cbrace[i], '{%1}') end
+		-- replace accents
+		for i = 1, #accents do
+			local accent = accents[i]
+			local spaces = accent:match('%a') and '+' or '*'
+			-- either (\\%a)%s+(%a)
+			-- or (\\["'%.=%^`~])%s*(%a)
+			local a = string.format('(\\%s)%%s%s(%%a)', accent, spaces)
+			replace(a, '{%1{%2}}')
+			-- (\\accent)%s*(%b{})
+			local b = string.format('(\\%s)%%s*(%%b{})', accent)
+			replace(b, '{%1%2}')
+			-- remove too many braces?
+-- 			local c = string.format('{({\\%s{%%a}})}', accent)
+-- 			while str:match(c) do
+-- 				replace(c, '%1')
+-- 			end
+		end
+		while str:match(mpattern) do str = str:gsub(mpattern, '%1') end
+		while str:match(apattern) do str = str:gsub(apattern, '%1') end
+		-- Revert some character escapes of HTML.
+    local matches = { ['&amp;'] = '&', ['&gt;'] = '>', ['&lt;'] = '<' }
+    for s, r in pairs(matches) do
+      replace(s, r)
+    end
+    
+    return str
 	end
-	local matches = { ['&amp;'] = '&', ['&gt;'] = '>', ['&lt;'] = '<' }
-	for s, r in pairs(matches) do
-	  replace(s, r)
-  end
-	return entry
 end
 
 --- Collect all \bibitem's from 'str' in a table.

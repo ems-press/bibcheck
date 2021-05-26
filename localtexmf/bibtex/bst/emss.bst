@@ -3,11 +3,11 @@
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/05/24
+%% Last changes: 2021/05/26
 %%
 %% The original source files were:
 %%
-%% merlin.mbs  (with options: `nm-rev,jnrlst,dt-jnl,xmth,vol-bf,vnum-x,volp-com,jdt-vs,num-xser,numser,ser-vol,jnm-x,edpar,edby,blk-tit,fin-bare,pp,ed,abr,xedn,jabr,varand,and-xcom,etal-xc,eprint,url,url-nt,nfss,')
+%% merlin.mbs  (with options: `nm-rev,jnrlst,dt-jnl,xmth,vol-bf,vnum-x,volp-com,jdt-vs,num-xser,numser,ser-vol,jnm-x,edpar,edby,blk-tit,fin-bare,pp,ed,abr,xedn,jabr,varand,etal-xc,eprint,url,url-nt,nfss,')
 %% ----------------------------------------
 %% *** EMS Press bibliography style with numerical labels and MR codes ***
 %%
@@ -440,6 +440,13 @@ FUNCTION {format.names}
               s nameptr "{ll}" format.name$ duplicate$ "others" =
                 { 't := }
                 { pop$ }
+              %%winter (Oxford comma begin)
+              if$
+              numnames #2 >
+              t "others" = not and
+                { "," * }
+                'skip$
+              %%winter (Oxford comma end)
               if$
               t "others" =
                 {
@@ -484,6 +491,13 @@ FUNCTION {format.names.ed}
               s nameptr "{ll}" format.name$ duplicate$ "others" =
                 { 't := }
                 { pop$ }
+              %%winter (Oxford comma begin)
+              if$
+              numnames #2 >
+              t "others" = not and
+                { "," * }
+                'skip$
+              %%winter (Oxford comma end)
               if$
               t "others" =
                 {
@@ -760,12 +774,21 @@ FUNCTION {format.vol.num.pages}
   if$
   bolden
   format.year *
+  number "number" bibinfo.check duplicate$ empty$ 'skip$
+    {
+      swap$ duplicate$ empty$
+        { "there's a number but no volume in " cite$ * warning$ }
+        'skip$
+      if$
+      swap$
+      ", " bbl.nr * number tie.or.space.prefix pop$ * swap$ *
+    }
+  if$ *
   eid empty$
     { format.journal.pages }
     { format.journal.eid }
   if$
 }
-
 FUNCTION {format.chapter.pages}
 { chapter empty$
     'format.pages
@@ -1054,8 +1077,8 @@ FUNCTION {inbook}
   format.edition output
   format.date "year" output.check
   date.block
-  format.note output %%winter
-  format.eprint output %%winter
+%%  format.note output %%winter
+%%  format.eprint output %%winter
   fin.entry
 }
 
@@ -1078,8 +1101,8 @@ FUNCTION {incollection}
   if$
   format.date "year" output.check
   date.block
-  format.note output %%winter
-  format.eprint output %%winter
+%%  format.note output %%winter
+%%  format.eprint output %%winter
   fin.entry
 }
 FUNCTION {inproceedings}
