@@ -1,5 +1,5 @@
 Simon Winter [winter@ems.press] 
-2021-05-22
+2021-09-17
 
 # How to install bibcheck (on Windows)
 
@@ -11,6 +11,16 @@ Simon Winter [winter@ems.press]
 * Download 'LuaForWindows_v5.1.5-52.exe' here:
   https://github.com/rjpcomputing/luaforwindows/releases/tag/v5.1.5-52
 * Run the exe file and always click "accept/next".
+
+## Note for Mac users
+On a Mac, the LuaFileSystem library (lfs) might be missing. 
+It seems that it's not a standard part of each Lua distribution. 
+If Lua has been installed with Homebrew, then Lua's package manager LuaRocks can help:
+```
+brew install luarocks
+luarocks install luafilesystem
+```
+Moreover, you probably need to repeat this process for 'penlight' (abbreviated 'pl').
 
 ## Install WGet (version 1.14 or higher)
 * Download from https://eternallybored.org/misc/wget/ the EXE file of Version 1.21 (32-bit or 64-bit).
@@ -42,6 +52,8 @@ lua C:\...\bibcheck.lua FILENAME.tex BSTFILENAME
 lua C:\tools\bibcheck\bibcheck.lua main.tex emss
 lua C:\tools\bibcheck\bibcheck.lua folder\main.tex amsalpha
 ```
+NOTE: The whole path must not contain any spaces!
+
 * Open the new file FILENAME_bibchecked.tex. It contains two kinds of \bibitem:
     * UNMATCHED ENTRY. 
     If no match in MathSciNet has been found, then manually format the original \bibitem
@@ -58,8 +70,7 @@ M.printZbl = false'
 ```
           
 ## Case 2: The tex file uses a bib file.
-* Run bibtex and copy the bbl content into the tex file.
-  Important: You must NOT use a \bibliographystyle which uses \bysame (such as 'amsplain').
+* Run bibtex (using \bibliographystyle{emss}) and copy the bbl content into the tex file.
 * Proceed as in CASE 1.
 
 ## Use a BAT file (on Windows)
