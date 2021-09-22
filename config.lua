@@ -24,7 +24,8 @@ M.remove_files = {
 M.database = {
 	-- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
 	mref = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref=',
-	zbl = 'https://zbmath.org/citationmatching/match?f=latex&q='
+	-- zbl = 'https://zbmath.org/citationmatching/match?f=latex&q='
+  zbl = 'https://zbmath.org/citationmatching/match?q='
 }
 
 return M
