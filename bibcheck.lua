@@ -1,5 +1,5 @@
---- This is bibcheck.
--- version 1.0 (2021-09-22)
+--- This is Bibcheck.
+-- version 1.0 (2021-09-23)
 
 -- authors: 
 -- Simon Winter [winter@ems.press]
