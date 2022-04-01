@@ -14,7 +14,7 @@ M.suffix = '_bibchecked'
 M.remove_files = {
   '.bib',
   '.bbl',
-	'.aux',
+  '.aux',
   '.log',
   '.dvi',
   '.blg',
@@ -22,9 +22,11 @@ M.remove_files = {
 
 --- MathSciNet and zbMATH settings.
 M.database = {
-	-- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
-	mref = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref=',
-	-- zbl = 'https://zbmath.org/citationmatching/match?f=latex&q='
+  -- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
+  mref = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref=',
+  -- Removing "f=latex" increases the hit rate.
+  -- See email by Fabian Müller (zbMATH) sent Sep 20, 2021.
+  -- zbl = 'https://zbmath.org/citationmatching/match?f=latex&q='
   zbl = 'https://zbmath.org/citationmatching/match?q='
 }
 

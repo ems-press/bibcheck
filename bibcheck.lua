@@ -1,15 +1,15 @@
 --- This is Bibcheck.
--- version 1.0 (2021-09-23)
+-- version 1.1 (2022-04-01)
 
--- authors: 
+-- authors:
 -- Simon Winter [winter@ems.press]
 -- Tobias Werner [werner@wissat-pc.de]
 
 -- tested on
 --  Windows 10 + Lua 5.1.5 + WGeT 1.21.1
---  Linux + Lua 5.4.2
+--  Linux + Lua 5.4.4
 
--- See 'README.md' on how to use this script.
+-- See 'bibcheck-manual.pdf' on how to use this script.
 
 local lfs = require 'lfs'
 
@@ -36,10 +36,10 @@ local texpattern = '(.-)%.tex$'
 -- Check if input_path is a full path (with separator)
 -- or a file name (no separator).
 if input_path:find(F.sep) then
-	folder, input = input_path:match(F.path('(.+)', texpattern))
+  folder, input = input_path:match(F.path('(.+)', texpattern))
 else
-	folder = lfs.currentdir()
-	input = input_path:match(texpattern)
+  folder = lfs.currentdir()
+  input = input_path:match(texpattern)
 end
 assert(input, 'File name not recognized.')
 -- Save current working directory.
@@ -66,35 +66,50 @@ local zbl_matches = {}
 local labels = {}
 -- Table indicates if bibitems[i] is MathSciNet matched (true) or unmatched (false).
 local MR_matched = {}
+-- Table indicates if the label of bibitems[i] contains space characters (true) or not (false).
+local Space_in_label = {}
 
 --------------------------------------------------------------------------------
 --- Main functions:
 
 --- Create BIB file.
 local function make_bib()
-	-- Remove comments and collect all \bibitem in a table.
+  -- Remove comments and collect all \bibitem in a table.
   bibitems = F.split_at_bibitem(F.remove_comments(old_bibl))
   -- Process each \bibitem.
-	for i = 1, #bibitems do
+  for i = 1, #bibitems do
+    local nob = #bibitems -- number of \bibitem's
     local bibitem = bibitems[i]
-		local function replace(s, r) bibitem = bibitem:gsub(s, r) end
-		-- Remove optional argument of \bibitem[.]{.} and spaces.
-		replace('\\bibitem[%%\n%s]*%b[][%%\n%s]*(%b{})', '\\bibitem%1')
-		replace('\\bibitem[%%\n%s]*(%b{})', '\\bibitem%1')
-		-- Remove \bibitem{.} and save the label.
-		labels[i] = bibitem:match('\\bibitem%b{}')
+    local function replace(s, r) bibitem = bibitem:gsub(s, r) end
+    -- Remove optional argument of \bibitem[.]{.} and spaces.
+    replace('\\bibitem[%%\n%s]*%b[][%%\n%s]*(%b{})', '\\bibitem%1')
+    replace('\\bibitem[%%\n%s]*(%b{})', '\\bibitem%1')
+    -- Save the label.
+    labels[i] = bibitem:match('\\bibitem%b{}')
     labels[i] = labels[i]:match('\\bibitem{(.-)}$')
+    -- Replace space characters by tilde.
+    if labels[i]:find('%s')  then
+      Space_in_label[i] = true
+      labels[i] = labels[i]:gsub('%s', '')
+    else
+      Space_in_label[i] = false
+    end
+    -- Remove \bibitem{.}
     -- don't use labels[i] here because of 'magic characters' issue.
-		replace('\\bibitem%b{}', '')
+    replace('\\bibitem%b{}', '')
     local original = bibitem:gsub('^[\n%s]+', '')
-		replace('\\newblock', ' ')
+    replace('\\newblock', ' ')
     replace('[%s\t]+', ' ')
- 		-- ******
+    -- ******
     -- Send entry to zbMATH.
     local ret
     if C.printZbl then
-      ret = F.execute('Checking zbMATH for \\bibitem '..i, false,
-        'wget -qO-', F.quote(C.database.zbl .. F.escapeUrl(bibitem)))
+      -- See comment at F.undress.
+      --print('\n'..bibitem..'\n')
+      local bibitem_naked = F.undress(bibitem)
+      --print('\n'..bibitem_naked..'\n')
+      ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..nob, false,
+        'wget -qO-', F.quote(C.database.zbl .. F.escapeUrl(bibitem_naked)))
       -- unpack the JSON ouput of zbMATH:
       local function isTable(t) return t and type(t) == 'table' end
       ret = ret and json.decode(ret)
@@ -102,54 +117,54 @@ local function make_bib()
       ret = isTable(ret) and table.unpack(ret)
     end
     zbl_matches[i] = ret
-		-- ******
+    -- ******
     -- Send entry to MathSciNet.
-		ret = F.execute('Checking MathSciNet for \\bibitem '..i, false,
-    	'wget -qO-', F.quote(C.database.mref .. F.escapeUrl(bibitem)))
-		local new_entry
+    ret = F.execute('Checking MathSciNet for \\bibitem '..i..' of '..nob, false,
+      'wget -qO-', F.quote(C.database.mref .. F.escapeUrl(bibitem)))
+    local new_entry
     if ret:find('%* Matched %*') then
-			-- match found
-			new_entry = ret:match('<pre>(.-)</pre>')
-			-- Correct some 'mistakes' in the BibTeX entry.
-			new_entry = F.normalizeTex(new_entry)      
-			-- Change label back to the original one.
+      -- match found
+      new_entry = ret:match('<pre>(.-)</pre>')
+      -- Correct some 'mistakes' in the BibTeX entry.
+      new_entry = F.normalizeTex(new_entry)
+      -- Change label back to the original one.
       local t = {'{', labels[i], ',', F.zbl_ID(zbl_matches[i])}
-			new_entry = new_entry:gsub('{MR%d+,', table.concat(t), 1)
+      new_entry = new_entry:gsub('{MR%d+,', table.concat(t), 1)
       -- Save entry as 'matched'.
       MR_matched[i] = true
-		else -- no match found
-			-- Remove leading spaces and empty lines from original entry
+    else -- no match found
+      -- Remove leading spaces and empty lines from original entry
       local t = {'@misc {', labels[i], ',\n NOTE = {', original, '},', F.zbl_ID(zbl_matches[i]), '\n}'}
-      new_entry = table.concat(t)      
+      new_entry = table.concat(t)
       -- Save entry as 'unmatched'.
       MR_matched[i] = false
     end
-    table.insert(bibtex_entries, new_entry)    
+    table.insert(bibtex_entries, new_entry)
   end
-	F.write_file(output .. '.bib', table.concat(bibtex_entries, '\n\n'))
+  F.write_file(output .. '.bib', table.concat(bibtex_entries, '\n\n'))
 end
 
 --- Create BBL file.
 local function make_bbl()
-	local t = {
-		'\\documentclass{article}',
-		'\\usepackage[utf8]{inputenc}',
-		'\\usepackage{amssymb}',
-		'\\newcommand\\MR[1]{MR~#1}',
-		'\\newcommand\\Zbl[1]{Zbl~#1}',    
+  local t = {
+    '\\documentclass{article}',
+    '\\usepackage[utf8]{inputenc}',
+    '\\usepackage{amssymb}',
+    '\\newcommand\\MR[1]{MR~#1}',
+    '\\newcommand\\Zbl[1]{Zbl~#1}',
     '\\begin{document}',
-		'\\nocite{*}',
-		'\\bibliographystyle{' .. bst .. '}',
-		'\\bibliography{' .. output .. '}',
-		'\\end{document}'
-	}
-	-- Write new TEX file.
-	local texname = output .. '.tex'
+    '\\nocite{*}',
+    '\\bibliographystyle{' .. bst .. '}',
+    '\\bibliography{' .. output .. '}',
+    '\\end{document}'
+  }
+  -- Write new TEX file.
+  local texname = output .. '.tex'
   F.write_file(texname, table.concat(t, '\n'))
   -- Compile it.
-	F.execute('\nRunning LaTeX', false, 'latex -interaction=nonstopmode -halt-on-error', texname, ' 2>&1')
-	-- Run bibtex.
-	F.execute('\nRunning BibTeX', true, 'bibtex', output)
+  F.execute('\nRunning LaTeX', false, 'latex -interaction=nonstopmode -halt-on-error', texname, ' 2>&1')
+  -- Run bibtex.
+  F.execute('\nRunning BibTeX', true, 'bibtex', output)
 end
 
 --- Add to the BBL file for each \bibitem
@@ -157,34 +172,36 @@ end
 --- or a warning that there was no MathSciNet match.
 --- Also add the zbMATH ID and entry.
 local function add_comments()
-	-- Read content of the BBL file.
-	new_bibl = F.read_file(output .. '.bbl')
-	-- Does the BST file create alphabetic or numeric labels?
+  -- Read content of the BBL file.
+  new_bibl = F.read_file(output .. '.bbl')
+  -- Does the BST file create alphabetic or numeric labels?
   local alphabetic = new_bibl:find('\\bibitem%b[]')
   -- Insert (another) blank line before each \bibitem
-	-- and at the very end (i.e. before \end{thebibliography}).
-	new_bibl = new_bibl:gsub('\\bibitem', '\n\\bibitem')
+  -- and at the very end (i.e. before \end{thebibliography}).
+  new_bibl = new_bibl:gsub('\\bibitem', '\n\\bibitem')
   new_bibl = new_bibl:gsub('\\end%s*{thebibliography}', '\n\\end{thebibliography}')
   for i = 1, #bibitems do
-    local orig_bibitem = '%%' 
+    local orig_bibitem = '%%'
     local s -- search
     local r -- replace
-    if MR_matched[i] then		
-		  local bibitem = bibitems[i] .. '\n'
-		  for line in bibitem:gmatch('(.-)\n') do
-  			if not line:find('^%c*$') then
-	  			orig_bibitem = orig_bibitem..' '..line
-			  end
-		  end
+    if MR_matched[i] then
+      local bibitem = bibitems[i] .. '\n'
+      for line in bibitem:gmatch('(.-)\n') do
+        if not line:find('^%c*$') then
+          orig_bibitem = orig_bibitem..' '..line
+        end
+      end
       -- Paste original entry and zbMATH entry.
       if alphabetic then
-		    s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
+        s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'\\bibitem%1{', labels[i], '}%2 ',
-             '\n%%__ Original:\n', orig_bibitem, F.zbl_info(zbl_matches[i]), '\n\n'}
+             '\n%%__ Original:\n', F.escape_percent(orig_bibitem),
+             F.zbl_info(zbl_matches[i]), '\n\n'}
       else
         s = '\\bibitem{'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'\\bibitem{', labels[i], '}%1 ',
-             '\n%%__ Original:\n', orig_bibitem, F.zbl_info(zbl_matches[i]), '\n\n'}
+             '\n%%__ Original:\n', F.escape_percent(orig_bibitem),
+             F.zbl_info(zbl_matches[i]), '\n\n'}
       end
     else -- unmatched entry
       if alphabetic then
@@ -192,38 +209,38 @@ local function add_comments()
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
              '\\bibitem%1{'..labels[i]..'}%2 ',
              F.zbl_info(zbl_matches[i]), '\n\n'}
-      else  
+      else
         s = '\\bibitem{'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
              '\\bibitem{'..labels[i]..'}%1 ',
              F.zbl_info(zbl_matches[i]), '\n\n'}
       end
     end
-    new_bibl = new_bibl:gsub(s, table.concat(r), 1)
+    new_bibl = new_bibl:gsub(s, F.space_warning(Space_in_label[i])..table.concat(r), 1)
   end
   new_bibl = new_bibl:gsub('\n\n\n', '\n\n')
   -- Overwrite BBL file.
-	F.write_file(output .. '.bbl', new_bibl)
+  F.write_file(output .. '.bbl', new_bibl)
 end
 
 --- Create TEX file.
 local function make_tex()
-	-- Escape Lua patterns in search string.
-	local s = F.escape_lua(old_bibl)
-	-- Remove \providecommand{\bysame} etc. from replacement string.
+  -- Escape Lua patterns in search string.
+  local s = F.escape_lua(old_bibl)
+  -- Remove \providecommand{\bysame} etc. from replacement string.
   new_bibl = new_bibl:match('(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})')
   -- Escape percent character in replacement string.
-  local r = new_bibl:gsub('%%', '%%%%')
-	-- Replace original bibliography with modified one.
-	local out = texcode:gsub(s, r, 1)
-	-- Overwrite TEX file.
-	F.write_file(output .. '.tex', out)
+  local r = F.escape_percent(new_bibl)
+  -- Replace original bibliography with modified one.
+  local out = texcode:gsub(s, r, 1)
+  -- Overwrite TEX file.
+  F.write_file(output .. '.tex', out)
 end
 
 --- Remove temporary files.
 local function remove_temp()
   for i = 1, #C.remove_files do
-	  os.remove(output .. C.remove_files[i])
+    os.remove(output .. C.remove_files[i])
   end
 end
 
