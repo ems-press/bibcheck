@@ -1,15 +1,15 @@
 %%
-%% This is file `emsnumericmr.bst',
+%% This is file `emss.bst',
 %% generated with the docstrip utility.
 %%
 %% Simon Winter: All changes marked with: %%winter
-%% Last changes: 2021/05/26
+%% Last changes: 2021/09/21
 %%
 %% The original source files were:
 %%
 %% merlin.mbs  (with options: `nm-rev,jnrlst,dt-jnl,xmth,vol-bf,vnum-x,volp-com,jdt-vs,num-xser,numser,ser-vol,jnm-x,edpar,edby,blk-tit,fin-bare,pp,ed,abr,xedn,jabr,varand,etal-xc,eprint,url,url-nt,nfss,')
 %% ----------------------------------------
-%% *** EMS Press bibliography style with numerical labels and MR codes ***
+%% *** EMS Press bibliography style with numerical labels and Zbl/MR codes ***
 %%
 %% Copyright 1994-2011 Patrick W Daly
  % ===============================================================
@@ -134,8 +134,12 @@ FUNCTION {output.nonempty.zblnumber}
   if$
 }
 FUNCTION {fin.entry}
-{ add.period$
-  write$
+%%{ add.period$
+%%  write$
+{ duplicate$ empty$
+    'pop$
+    'write$
+  if$
   zblnumber output.nonempty.zblnumber %%winter
   mrnumber output.nonempty.mrnumber %%winter
   newline$
@@ -1264,6 +1268,7 @@ FUNCTION {unpublished}
 { output.bibitem
   format.authors "author" output.check
   format.title "title" output.check
+  new.sentence
   format.date output
   format.note "note" output.check
   format.eprint output
