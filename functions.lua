@@ -3,6 +3,8 @@
 local M = {}
 
 local pl_file = require 'pl.file'
+local C = require 'config'
+local json = require 'dkjson'
 
 M.sep = package.config:sub(1, 1)
 -- TRUE if Windows, otherwise FALSE
@@ -102,7 +104,22 @@ function M.zbl_info(tab)
   end
 end
 
---- Return Zbl entry for BIB file of former JSON table from zbMATH.
+--- Return some values of former JSON table from Crossref.
+-- Input: table tab
+-- Output: string
+function M.crossref_info(tab)
+  if tab then
+    local title = tab.title[1]
+    title = title:gsub('\n', '')
+    return '\n%%\n%% No DOI in MathSciNet. With a relevance score of '
+    ..tab.score..' Crossref returned:\n%% '
+    ..'https://doi.org/'..tab.DOI..'\n%% '..title
+  else
+    return ''
+  end
+end
+
+--- Return ZBLNUMBER from former JSON table from zbMATH.
 -- Input: table tab
 -- Output: string
 function M.zbl_ID(tab)
@@ -111,6 +128,18 @@ function M.zbl_ID(tab)
   -- Formally, we need to check if tab.zbl_id is a string because
   -- string concatenation .. expects a string, or something that can be converted to one.
     return '\nZBLNUMBER = {'..tab.zbl_id..'},'
+  else
+    return ''
+  end
+end
+
+--- Return DOI from former JSON table from Crossref.
+-- Input: table tab
+-- Output: string
+function M.crossref_DOI(tab)
+  -- if tab then
+  if tab and type(tab)=='table' and tab.DOI then
+    return '\nDOI = {'..tab.DOI..'},'
   else
     return ''
   end
@@ -127,23 +156,35 @@ function M.space_warning(b)
   end
 end
 
---- Remove some tex commands before \bibitem is sent to the zbMATH Citation Matcher.
---- It seems that this increases the hit rate. See the comment at M.database.
+--- Remove some tex commands before \bibitem is sent to the zbMATH Citation Matcher
+--- to increase the hit rate. See email by Fabian Müller (zbMATH) sent 23 Jan 2023.
 -- Input: string str
 -- Output: string
 do
   -- Mind the order of entries in 'match'!
   local match = {
-    {'\\%a+(%A)', '%1'}, -- remove all latex commands
+    {'\\"', ''},  -- Umlaut
+    {"\\'", ''},  -- acute accent
+    {"\\`", ''},  -- grave accent
+    {"\\%^", ''}, -- circumflex
+    {"\\~", ''},  -- tilde
+    {"\\=", ''},  -- bar
+    {"\\%.", ''}, -- dot
+    {"\\!", ''},
+    {"\\i(%A)", 'i%1'}, -- dotless i
+    {'\\%a%s', ''},
+    {'\\%a+(%A)', '%1'}, -- remove all latex commands, especially accents \H, \v, etc.
     {'~', ' '},
     {'{', ''},
     {'}', ''},
   }
   M.undress = function(str)
-    for i = 1, #match do 
+    --print('\nORIGINAL: '..str)
+    for i = 1, #match do
       local s, r = table.unpack(match[i])
       str = str:gsub(s,r)
     end
+    --print('\nNAKED: '..str..'\n')
     return str
   end
 end
@@ -304,6 +345,21 @@ function M.read_file(file)
   local str = pl_file.read(file)
   assert(str, 'Cannot read file ' .. file)
   return str
+end
+
+--- Send str to Crossref.
+-- Input: string str
+-- Output: table
+function M.get_crossref(str)
+  local ret = M.execute('  Trying to get DOI from Crossref', false,
+    'wget -qO-', M.quote(C.crossref .. M.escapeUrl(str)))
+  -- unpack the JSON ouput of Crossref:
+  local function isTable(t) return t and type(t) == 'table' end
+  ret = ret and json.decode(ret)
+  ret = isTable(ret) and ret.message
+  ret = isTable(ret) and ret.items
+  ret = isTable(ret) and table.unpack(ret)
+  return ret
 end
 
 return M

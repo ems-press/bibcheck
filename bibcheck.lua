@@ -1,5 +1,5 @@
 --- This is Bibcheck.
--- version 1.1 (2022-04-01)
+-- version 1.2 (2023-02-01)
 
 -- authors:
 -- Simon Winter [winter@ems.press]
@@ -61,6 +61,7 @@ local new_bibl = false
 local bibitems = {}
 local bibtex_entries = {}
 local zbl_matches = {}
+local crossref_matches = {}
 
 --- All \bibitem labels.
 local labels = {}
@@ -100,45 +101,81 @@ local function make_bib()
     local original = bibitem:gsub('^[\n%s]+', '')
     replace('\\newblock', ' ')
     replace('[%s\t]+', ' ')
-    -- ******
     -- Send entry to zbMATH.
     local ret
-    if C.printZbl then
-      -- See comment at F.undress.
-      --print('\n'..bibitem..'\n')
-      local bibitem_naked = F.undress(bibitem)
-      --print('\n'..bibitem_naked..'\n')
+    local bibitem_naked = F.undress(bibitem)
+    if C.checkzbMATH then
       ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..nob, false,
-        'wget -qO-', F.quote(C.database.zbl .. F.escapeUrl(bibitem_naked)))
+        'wget -qO-', F.quote(C.zbmath .. F.escapeUrl(bibitem_naked)))
       -- unpack the JSON ouput of zbMATH:
       local function isTable(t) return t and type(t) == 'table' end
       ret = ret and json.decode(ret)
       ret = isTable(ret) and ret.results
+      -- Most often, the zbMATH's syntax for "no match" is:
+      -- "results": []
       ret = isTable(ret) and table.unpack(ret)
+      -- But sometimes it's:
+      -- "results": [ {} ]
+      -- So we ensure next that 'ret' has an entry 'zbl_id'.
+      if ret and not ret.zbl_id then ret = false end
     end
     zbl_matches[i] = ret
-    -- ******
     -- Send entry to MathSciNet.
     ret = F.execute('Checking MathSciNet for \\bibitem '..i..' of '..nob, false,
-      'wget -qO-', F.quote(C.database.mref .. F.escapeUrl(bibitem)))
+      'wget -qO-', F.quote(C.mathscinet .. F.escapeUrl(bibitem)))
     local new_entry
+    local crossref
+    -- IF MathSciNet match found
     if ret:find('%* Matched %*') then
-      -- match found
       new_entry = ret:match('<pre>(.-)</pre>')
       -- Correct some 'mistakes' in the BibTeX entry.
       new_entry = F.normalizeTex(new_entry)
-      -- Change label back to the original one.
+      -- Send entry to Crossref only if the BibTeX entry has no DOI value.
+      if C.checkCrossref and not new_entry:find('DOI%s+=') then
+        crossref = F.get_crossref(bibitem_naked)
+      end
+      --
+      -- -- FAILED TEST [begin]
+      -- -- Send the BibTeX entry from MathSciNet ('new_entry') to zbMATH. The goal is to get a
+      -- -- higher hit rate at zbMATH. But their BibTeX interface doesn't work properly.
+      -- -- Moreover, a disadvantage would be that we process mismatches from MathSciNet.
+      -- if C.checkzbMATH then
+      --   ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..nob, false,
+      --     'wget -qO-', F.quote('https://zbmath.org/citationmatching/match?bibtex&q='
+      --     .. F.escapeUrl(new_entry)))
+      -- unpack the JSON ouput of zbMATH:
+      --   local function isTable(t) return t and type(t) == 'table' end
+      --   ret = ret and json.decode(ret)
+      --   ret = isTable(ret) and ret.results
+      --   ret = isTable(ret) and table.unpack(ret)
+      --   zbl_matches[i] = ret
+      -- end
+      -- -- FAILED TEST [end]
+      --
+      -- -- FAILED TEST [begin]
+      -- -- Change label back to the original one, add ZBLNUMBER, and add Crossref-DOI.
+      -- local t = {'{', labels[i], ',', F.zbl_ID(zbl_matches[i]), F.crossref_DOI(crossref)}
+      -- -- FAILED TEST [end]
+      --
+      -- Change label back to the original one and add ZBLNUMBER.
       local t = {'{', labels[i], ',', F.zbl_ID(zbl_matches[i])}
       new_entry = new_entry:gsub('{MR%d+,', table.concat(t), 1)
       -- Save entry as 'matched'.
       MR_matched[i] = true
-    else -- no match found
-      -- Remove leading spaces and empty lines from original entry
+    -- IF no MathSciNet match found
+    else
+      -- Send entry to Crossref.
+      if C.checkCrossref then
+        crossref = F.get_crossref(bibitem_naked)
+      end
+      -- Remove leading spaces and empty lines from original entry.
+      -- Note: Don't add Crossref's DOI to BibTeX entry, only as comment; see add_comments().
       local t = {'@misc {', labels[i], ',\n NOTE = {', original, '},', F.zbl_ID(zbl_matches[i]), '\n}'}
       new_entry = table.concat(t)
       -- Save entry as 'unmatched'.
       MR_matched[i] = false
     end
+    crossref_matches[i] = crossref
     table.insert(bibtex_entries, new_entry)
   end
   F.write_file(output .. '.bib', table.concat(bibtex_entries, '\n\n'))
@@ -196,24 +233,24 @@ local function add_comments()
         s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'\\bibitem%1{', labels[i], '}%2 ',
              '\n%%__ Original:\n', F.escape_percent(orig_bibitem),
-             F.zbl_info(zbl_matches[i]), '\n\n'}
+             F.zbl_info(zbl_matches[i]), F.crossref_info(crossref_matches[i]), '\n\n'}
       else
         s = '\\bibitem{'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'\\bibitem{', labels[i], '}%1 ',
              '\n%%__ Original:\n', F.escape_percent(orig_bibitem),
-             F.zbl_info(zbl_matches[i]), '\n\n'}
+             F.zbl_info(zbl_matches[i]), F.crossref_info(crossref_matches[i]), '\n\n'}
       end
     else -- unmatched entry
       if alphabetic then
         s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
              '\\bibitem%1{'..labels[i]..'}%2 ',
-             F.zbl_info(zbl_matches[i]), '\n\n'}
+             F.zbl_info(zbl_matches[i]), F.crossref_info(crossref_matches[i]), '\n\n'}
       else
         s = '\\bibitem{'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
              '\\bibitem{'..labels[i]..'}%1 ',
-             F.zbl_info(zbl_matches[i]), '\n\n'}
+             F.zbl_info(zbl_matches[i]), F.crossref_info(crossref_matches[i]), '\n\n'}
       end
     end
     new_bibl = new_bibl:gsub(s, F.space_warning(Space_in_label[i])..table.concat(r), 1)
