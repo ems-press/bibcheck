@@ -1,5 +1,5 @@
 --- This is Bibcheck.
--- version 1.2 (2023-02-01)
+-- version 1.3 (2023-02-21)
 
 -- authors:
 -- Simon Winter [winter@ems.press]
@@ -26,9 +26,9 @@ table.unpack = table.unpack or unpack
 -- in order to be available in both Lua 5.1 and Lua 5.2+
 -- http://lua-users.org/lists/lua-l/2013-10/msg00534.html
 
---- TeX file input path.
+-- TeX file input path.
 local input_path = arg[1]
---- Bibliography style (for example, 'amsplain').
+-- Bibliography style (for example, 'amsplain').
 local bst = arg[2] or C.bibstyle
 
 local folder, input
@@ -47,13 +47,13 @@ local cwd = lfs.currentdir()
 -- Change to folder of input file.
 lfs.chdir(folder)
 
---- Name for all (temporary and final) files created by this script.
+-- Name for all (temporary and final) files created by this script.
 local output = input .. C.suffix
 
---- Content of the original TEX file.
+-- Content of the original TEX file.
 local texcode = F.read_file(input .. '.tex')
 
---- Bibliography of the original TEX file.
+-- Bibliography of the original TEX file.
 local old_bibl = texcode:match('(\\begin%s*{thebibliography}.-\\end%s*{thebibliography})')
 assert(old_bibl, 'No bibliography found.')
 
@@ -63,32 +63,43 @@ local bibtex_entries = {}
 local zbl_matches = {}
 local crossref_matches = {}
 
---- All \bibitem labels.
+-- All \bibitem labels.
 local labels = {}
+-- All \bibitem without optional argument.
+local modifiedbibitems = {}
 -- Table indicates if bibitems[i] is MathSciNet matched (true) or unmatched (false).
 local MR_matched = {}
 -- Table indicates if the label of bibitems[i] contains space characters (true) or not (false).
 local Space_in_label = {}
 
 --------------------------------------------------------------------------------
---- Main functions:
+-- Main functions:
 
---- Create BIB file.
+-- Create BIB file.
 local function make_bib()
   -- Remove comments and collect all \bibitem in a table.
   bibitems = F.split_at_bibitem(F.remove_comments(old_bibl))
-  -- Process each \bibitem.
+  local all_labels = {}
+  -- Process each \bibitem, Part I.
   for i = 1, #bibitems do
-    local nob = #bibitems -- number of \bibitem's
     local bibitem = bibitems[i]
-    local function replace(s, r) bibitem = bibitem:gsub(s, r) end
     -- Remove optional argument of \bibitem[.]{.} and spaces.
-    replace('\\bibitem[%%\n%s]*%b[][%%\n%s]*(%b{})', '\\bibitem%1')
-    replace('\\bibitem[%%\n%s]*(%b{})', '\\bibitem%1')
+    bibitem = bibitem:gsub('\\bibitem[%%\n%s]*%b[][%%\n%s]*(%b{})', '\\bibitem%1')
+    bibitem = bibitem:gsub('\\bibitem[%%\n%s]*(%b{})', '\\bibitem%1')
+    modifiedbibitems[i] = bibitem
     -- Save the label.
     labels[i] = bibitem:match('\\bibitem%b{}')
     labels[i] = labels[i]:match('\\bibitem{(.-)}$')
-    -- Replace space characters by tilde.
+    -- Check if two \bibitem have the same label (modulo capitalization).
+    local label = labels[i]:lower() 
+    assert(not all_labels[label], '\n\n%%%% ERROR: Label "'..label..'"'
+      ..' (possibly with capital letters) appears twice. Fix it and run Bibcheck again.\n')
+    all_labels[label] = i 
+  end
+  -- Process each \bibitem, Part II.
+  for i = 1, #bibitems do
+    local bibitem = modifiedbibitems[i]
+    -- Replace space characters in the label by tilde.
     if labels[i]:find('%s')  then
       Space_in_label[i] = true
       labels[i] = labels[i]:gsub('%s', '')
@@ -97,15 +108,15 @@ local function make_bib()
     end
     -- Remove \bibitem{.}
     -- don't use labels[i] here because of 'magic characters' issue.
-    replace('\\bibitem%b{}', '')
+    bibitem = bibitem:gsub('\\bibitem%b{}', '')
     local original = bibitem:gsub('^[\n%s]+', '')
-    replace('\\newblock', ' ')
-    replace('[%s\t]+', ' ')
+    bibitem = bibitem:gsub('\\newblock', ' ')
+    bibitem = bibitem:gsub('[%s\t]+', ' ')
     -- Send entry to zbMATH.
     local ret
     local bibitem_naked = F.undress(bibitem)
     if C.checkzbMATH then
-      ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..nob, false,
+      ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..#bibitems, false,
         'wget -qO-', F.quote(C.zbmath .. F.escapeUrl(bibitem_naked)))
       -- unpack the JSON ouput of zbMATH:
       local function isTable(t) return t and type(t) == 'table' end
@@ -121,7 +132,7 @@ local function make_bib()
     end
     zbl_matches[i] = ret
     -- Send entry to MathSciNet.
-    ret = F.execute('Checking MathSciNet for \\bibitem '..i..' of '..nob, false,
+    ret = F.execute('Checking MathSciNet for \\bibitem '..i..' of '..#bibitems, false,
       'wget -qO-', F.quote(C.mathscinet .. F.escapeUrl(bibitem)))
     local new_entry
     local crossref
@@ -140,7 +151,7 @@ local function make_bib()
       -- -- higher hit rate at zbMATH. But their BibTeX interface doesn't work properly.
       -- -- Moreover, a disadvantage would be that we process mismatches from MathSciNet.
       -- if C.checkzbMATH then
-      --   ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..nob, false,
+      --   ret = F.execute('Checking zbMATH for \\bibitem '..i..' of '..#bibitems, false,
       --     'wget -qO-', F.quote('https://zbmath.org/citationmatching/match?bibtex&q='
       --     .. F.escapeUrl(new_entry)))
       -- unpack the JSON ouput of zbMATH:
@@ -181,7 +192,7 @@ local function make_bib()
   F.write_file(output .. '.bib', table.concat(bibtex_entries, '\n\n'))
 end
 
---- Create BBL file.
+-- Create BBL file.
 local function make_bbl()
   local t = {
     '\\documentclass{article}',
@@ -204,10 +215,10 @@ local function make_bbl()
   F.execute('\nRunning BibTeX', true, 'bibtex', output)
 end
 
---- Add to the BBL file for each \bibitem
---- either the original \bibitem (as a comment) if there was a MathSciNet match
---- or a warning that there was no MathSciNet match.
---- Also add the zbMATH ID and entry.
+-- Add to the BBL file for each \bibitem
+-- either the original \bibitem (as a comment) if there was a MathSciNet match
+-- or a warning that there was no MathSciNet match.
+-- Also add the zbMATH ID and entry.
 local function add_comments()
   -- Read content of the BBL file.
   new_bibl = F.read_file(output .. '.bbl')
@@ -260,7 +271,7 @@ local function add_comments()
   F.write_file(output .. '.bbl', new_bibl)
 end
 
---- Create TEX file.
+-- Create TEX file.
 local function make_tex()
   -- Escape Lua patterns in search string.
   local s = F.escape_lua(old_bibl)
@@ -274,7 +285,7 @@ local function make_tex()
   F.write_file(output .. '.tex', out)
 end
 
---- Remove temporary files.
+-- Remove temporary files.
 local function remove_temp()
   for i = 1, #C.remove_files do
     os.remove(output .. C.remove_files[i])
