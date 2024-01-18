@@ -3,13 +3,39 @@
 local M = {}
 
 --- Default bibstyle.
-M.bibstyle = 'emss'
+M.bibstyle = 'ems'
 
 --- Query zbMATH?
 M.checkzbMATH = true
 
+--- Threshold for zbMATH relevance score: \Zbl will be inserted into \bibitems only above this score,
+--- otherwise it will only be included in the comment for the zbMATH entry
+M.ZblRelevanceScoreThreshold = 5.9
+
 --- Query Crossref?
-M.checkCrossref = false
+M.checkCrossref = true
+-- false -- true
+
+--- Query arXiv?
+M.checkArXiv = true
+-- false -- true
+
+--- Query Zbl fro Numdam?
+M.checkNumdam = false
+-- false -- true
+
+--- Query MathSciNet for TeX (as comment)?
+M.checkMRTeX = true
+
+--- Whether save NOTEs from MathSciNet matches as a comment
+M.saveMRNote = true
+
+--- Whether check MathSciNet with naked bibitem
+M.checkMRnaked = true
+
+--- Whether (ProQuest) Theses should be proper phdthesis .bib entries (w/o publisher and url)
+--- [or just include the original note (containing thesis info and school) as (fake) series]
+M.bookThesisAsPhDThesis = true
 
 --- Contact for Crossref (optional)
 M.mailto = false
@@ -19,17 +45,18 @@ M.mailto = false
 M.suffix = '_bibchecked'
 
 M.remove_files = {
-  '.bib',
-  '.bbl',
-  '.aux',
-  '.log',
-  '.dvi',
-  '.blg',
+--  '.bib',
+--  '.bbl',
+--  '.aux',
+--  '.log',
+--  '.dvi',
+--  '.blg',
 }
 
 --- MathSciNet settings.
 --- N.B.: dataType=tex or dataType=bibtex (or mathscinet).
 M.mathscinet = 'https://mathscinet.ams.org/mathscinet-mref?dataType=bibtex&ref='
+M.mmathscinet = 'https://mathscinet.ams.org/mathscinet-mref?dataType=tex&ref='
 
 --- zbMATH settings.
 --- Removing "f=latex" increases the hit rate; see email by Fabian Müller (zbMATH)
@@ -45,6 +72,14 @@ if M.mailto then
 else
   M.crossref = 'https://api.crossref.org/works?rows=1&sort=score&order=desc&query.bibliographic='
 end
+
+M.arxivapi = 'http://export.arxiv.org/api/query?id_list='
+
+--M.arxivapiq = 'http://export.arxiv.org/api/query?search_query='
+M.arxivapiq = 'http://export.arxiv.org/api/query?sortBy=relevance&start=0&max_results=1&search_query='
+
+M.MRefsCSV = 'journal_abbreviations_mathematics.csv' -- annserb.csv, annser.csv
+M.MRefsCSVURL = 'https://abbrv.jabref.org/journals/journal_abbreviations_mathematics.csv' -- annserb.csv, annser.csv
 
 return M
 
