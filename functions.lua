@@ -74,7 +74,6 @@ do
     for s, r in pairs(matches) do
       replace(s, r)
     end
-
     return str
   end
 end
@@ -96,7 +95,8 @@ function M.split_at_bibitem(str)
   return t
 end
 
---- Return some values of former JSON table from zbMATH.
+-- Return some values of former JSON table from zbMATH as a comment
+---- with relevance score (also \Zbl{} if score is below the threshold) in the prefix
 -- Input: table tab
 -- Output: string
 function M.zbl_info(tab)
@@ -112,6 +112,7 @@ function M.zbl_info(tab)
   end
 end
 
+-- return MathSciNet TeX-type response as a comment
 function M.mr_tex_info(s)
   if s~='' and s~=nil then
     s=s:gsub("\\cprime%s*","'")
@@ -121,6 +122,7 @@ function M.mr_tex_info(s)
   end
 end
 
+-- return .bib's NOTE value as a comment
 function M.mr_note_info(s)
   if s~='' and s~=nil then
     s=s:gsub("\\cprime%s*","'")
@@ -135,6 +137,7 @@ end
 -- Output: string
 function M.crossref_info(tab)
   if tab then
+    -- fix for Crossref not returning a title (or the title returned is empty)
     local title = ''
     if tab.title then
       title = tab.title[1]
@@ -154,11 +157,13 @@ end
 -- Input: table tab
 -- Output: string
 function M.zbl_ID(tab)
-  -- if tab then
+  -- if tab, AND relevance score is above the threshold then
   if tab and type(tab)=='table' and tab.zbl_id and tab.score>=C.ZblRelevanceScoreThreshold then -- >=5.5
   -- Formally, we need to check if tab.zbl_id is a string because
   -- string concatenation .. expects a string, or something that can be converted to one.
    if C.checkNumdam and not new_entry:find('NUMDAM%s+=') then 
+    -- checking zbMATH page for NUMDAM entry, based on config setting
+    -- ...and put it to the .bib entry as NUMDAM value
     local retwo
     retwo = M.execute('Checking Zbl for Numdam ('..tab.zbl_id..')', false,
       'wget -qO-', M.quote('https://zbmath.org/'..tab.zbl_id))
@@ -219,9 +224,9 @@ do
     {"\\%.", ''}, -- dot
     {"\\!", ''},
     {"\\i(%A)", 'i%1'}, -- dotless i
-    {'\\href{[^}]+}', ''},
-    {'\\MR{[^}]+}', ''},
-    {'\\Zbl{[^}]+}', ''},
+    {'\\href{[^}]+}', ''}, -- remove \href links,...
+    {'\\MR{[^}]+}', ''}, -- ...\MR{}s,...
+    {'\\Zbl{[^}]+}', ''}, -- ...and \Zbl{}s from the query (for getting result more reliably)
     {'\\%a%s', ''},
     {'\\%a+(%A)', '%1'}, -- remove all latex commands, especially accents \H, \v, etc.
     {'~', ' '},
@@ -309,6 +314,8 @@ do
 end
 
 --- Create pipe and execute command.
+---- if command is a plain wget and it produces no output,
+---- re-execute it with --no-check-certificate option (assuming SSL error)
 -- Input: string info, boolean log (print output), variable number of strings ...
 -- Output: string
 function M.execute(info, log, ...)
@@ -426,6 +433,7 @@ function M.get_crossref(str)
   return ret
 end
 
+-- function for print table values-keys recursively for debugging
 function M.printTable(t,l)
  local nextlevel=l+1
  for k,v in pairs(t) do
@@ -437,6 +445,8 @@ function M.printTable(t,l)
  end
 end
 
+-- function for trying to convert (arXiv API returned) titles properly case-preserving string by BibTeX
+-- + converting greek letters and leq/geq chars in titles by their TeX commands
 function M.ucaseTitle(t)
  local to=t:gsub('(%$[^%$]+%$)','{%1}')
  if (t:find('%s%l%l%l%l%l')) then -- there exists at least one at least 5 character long lowercase word
@@ -467,6 +477,7 @@ function M.get_arxiv(str,str_naked)
   local arxiv=''
   local axret=''
   local axentry
+  -- trying to get arXiv ID from preprint \bibitem entries...
   if str:find('[aA][rR][Xx][iI][vV][:%.%(]?%s*[Pp]?r?e%-?print[:%.]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
     arxiv = str:match('[aA][rR][Xx][iI][vV][:%.%(]?%s*[Pp]reprint[:%.]?%s*([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
   elseif str:find('arxiv%.org%/abs%/[%a%d%/%.]+%d%/?') then
@@ -479,23 +490,26 @@ function M.get_arxiv(str,str_naked)
     arxiv = str:match('\\[eE][pP][rR][iI][nN][tT]%s*%{%s*([^%s%}]+%d)%s*%}')
   end
   if arxiv~='' or str_naked:match('[Pp]?[rR?][eE]%-?[pP][rR][iI][nN][tT]') or str_naked:match('[aA][rR][xX][iI][vV]') then -- or str_naked:match('[Pp][rR][eE][pP][aA][rR][aA][tT][iI][oO][nN]')
+  -- if arXiv ID found OR the entry is a preprint or arXiv...
     local function isTable(t) return t and type(t) == 'table' end
     if arxiv~='' then
+     -- arXiv number found, querying arXiv API for arXiv ID
      axret = M.execute('arXiv found: '..arxiv..', checking arXiv API... ' --..i..' of '..#bibitems
       , false,
       'wget -qO-', M.quote(C.arxivapi .. M.escapeUrl(arxiv)))
     else
+     -- arXiv number NOT found, querying arXiv API for (naked) bibitem value for best match...
 -- print (C.arxivapiq .. M.escapeUrl(str_naked:gsub("^%s*(.-)%s*$", "%1")))
      axret = M.execute('  querying arXiv for '..str_naked:gsub("^%s*(.-)%s*$", "%1"), --..i..' of '..#bibitems
       false,
       'wget -qO-', M.quote(C.arxivapiq .. M.escapeUrl(str_naked:gsub("^%s*(.-)%s*$", "%1"))))
     end
-  local xmlhandler = require("xmlhtree")
-  local axHandler = xmlhandler:new()
-  local xmlparser = xml2lua.parser(axHandler)
--- print (axret)
-  xmlparser:parse(axret)
-  local axentry = axHandler and axHandler.root and type(axHandler.root)=='table' and axHandler.root.feed and type(axHandler.root.feed)=='table' and axHandler.root.feed.entry
+    local xmlhandler = require("xmlhtree")
+    local axHandler = xmlhandler:new()
+    local xmlparser = xml2lua.parser(axHandler)
+--  print (axret)
+    xmlparser:parse(axret)
+    local axentry = axHandler and axHandler.root and type(axHandler.root)=='table' and axHandler.root.feed and type(axHandler.root.feed)=='table' and axHandler.root.feed.entry
 --[[
 If there is more than one person, then person is an array instead of a regular table.
 This way, we need to iterate over the person array instead of the people table.
@@ -535,10 +549,10 @@ This way, we need to iterate over the person array instead of the people table.
       ret = ret..'      TITLE = {'..M.ucaseTitle(axentry.title)..'}\n';
     end
   end
-  -- unpack the JSON ouput of Crossref:
   return ret
 end
 
+-- function to check whether the {name} path/files exists
 function M.file_exists(name)
    local f=io.open(name,"r")
    if f~=nil then io.close(f) return true else return false end

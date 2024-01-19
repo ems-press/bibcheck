@@ -73,7 +73,9 @@ local labels = {}
 local modifiedbibitems = {}
 -- Table indicates if bibitems[i] is MathSciNet matched (true) or unmatched (false).
 local MR_matched = {}
+-- Table indicates if bibitems[i] is MathSciNet TeX-type matched (true) or unmatched (false).
 local MR_matched_TeX = {}
+-- Table indicates if (MathSciNet) matched entry contains NOTE element/value (true) or not (false).
 local MR_note = {}
 -- Table indicates if the label of bibitems[i] contains space characters (true) or not (false).
 local Space_in_label = {}
@@ -134,6 +136,7 @@ local function make_bib()
   else --if CSV file exists...
     MRefsAbbrevs, MRefsAbbrevsHeaders = ftcsv.parse(path..C.MRefsCSV, ",", {headers=false})
   end
+  ---- storing abbreviated title values in MRefsAbbr table, indexed by lowercase full series title
   if type(MRefsAbbrevs)=='table' and #MRefsAbbrevs then
     for _, MRefsRow in pairs(MRefsAbbrevs) do
       MRefsAbbr[string.lower(MRefsRow[1])]=MRefsRow[2]
@@ -178,6 +181,7 @@ local function make_bib()
     -- Send entry to MathSciNet.
     MR_matched_TeX[i] = ''
     MR_note[i] = ''
+    ---- match against naked or original bibitem value, based on checkMRnaked config setting
     ret = F.execute('Checking MathSciNet for \\bibitem '..i..' of '..#bibitems, false,
       'wget -qO-', F.quote(C.mathscinet .. F.escapeUrl(C.checkMRnaked and bibitem_naked or bibitem)))
 --    new_entry
@@ -187,6 +191,7 @@ local function make_bib()
       new_entry = ret:match('<pre>(.-)</pre>')
       -- Correct some 'mistakes' in the BibTeX entry.
       new_entry = F.normalizeTex(new_entry)
+      -- MathSciNet-matched entry's NOTE value to be saved as a comment based on saveMRNote config setting
       if C.saveMRNote then
         MR_note[i] = new_entry:match('[Nn][Oo][Tt][Ee]%s*%=%s*{(.-)}%,?')
       end
@@ -222,12 +227,12 @@ local function make_bib()
       new_entry = new_entry:gsub('{MR%d+,', table.concat(t), 1)
       -- Save entry as 'matched'.
       MR_matched[i] = true
+      -- get also MathSciNet TeX-type result based on checkMRTeX config setting
       if C.checkMRTeX then
        ret_TeX = F.execute('Saving MathSciNet TeX as comment for \\bibitem '..i..' of '..#bibitems, false,
        'wget -qO-', F.quote(C.mmathscinet .. F.escapeUrl(C.checkMRnaked and bibitem_naked or bibitem)))
        if ret_TeX:find('%* Matched %*') then
         new_entry_TeX = ret_TeX:match('<tr><td align%=%"left%">([%a%{\\%$].-)</td></tr>')
-        -- Correct some 'mistakes' in the (Bib)TeX entry.
         if new_entry_TeX~='' and new_entry_TeX~=nil then
           MR_matched_TeX[i] = new_entry_TeX:gsub('\n',' ') -- F.normalizeTex(new_entry_TeX)
         end
@@ -235,7 +240,7 @@ local function make_bib()
       end
     -- IF no MathSciNet match found
     else
--- check if entry has arXiv no.
+      -- check if entry has arXiv no., get_arxiv returns .bib entry generated from API's best match XML result
       if C.checkArXiv then
         arxiv = F.get_arxiv(bibitem,bibitem_naked) -- bibitem_naked
       end
@@ -247,6 +252,7 @@ local function make_bib()
       -- Note: Don't add Crossref's DOI to BibTeX entry, only as comment; see add_comments().
       local t = {}
       if arxiv ~= '' then
+        -- faking arXiv API match as MR match, to include entry in .bib as a @misc
         MR_matched[i] = true
         t = {'@misc {', labels[i], ',\n',arxiv, ',', F.zbl_ID(zbl_matches[i]),'}'}
       else
@@ -257,15 +263,22 @@ local function make_bib()
       new_entry = table.concat(t)
     end
     crossref_matches[i] = crossref
+    -- remove Verlag from PUBLISHER .bib values after Springer and Birkh\"auser
     new_entry=new_entry:gsub('([Pp][Uu][Bb][Ll][Ii][Ss][Hh][Ee][Rr]%s*%=*%s*{[^}]+a?}?}?[nNuU][gGsS][eE][rR])[%s%-]+[Vv][eE][rR][lL][aA][gG]','%1')
+    -- replace eprint PAGES article number prefiexes (Art./Article/Paper no./number, etc.) by `article no.'
     new_entry=new_entry:gsub('([Pp][Aa][Gg][Ee][Ss]%s*%=*%s*[^}]+)[AaPp][rRaA][tTpP][%.ieE]?[cCrR]?[lL]?[eE]?[%s%~]*[nN]?[oOuU]?[mM%.]?[bB]?[eE]?[rR]?[%s%~]*([%a%d%.%-]+)[%s%.]*%,?[%a%d%s%.%~%+%,]*}','%1article no.~%2}')
-    new_entry=new_entry:gsub('([Pp][Uu][Bb][Ll][Ii][Ss][Hh][Ee][Rr]%s*%=*%s*{[^}%]]+)%[([^%]]+)%]','%1%2')
-    new_entry=new_entry:gsub('([Yy][Ee][Aa][Rr]%s*%=*%s*{[^}%]]*)%[[^%]]+%]%s*\\copyright%s*(%d+)','%1%2')
+    -- remove (translation?) information in [] from PUBLISHERs
+    new_entry=new_entry:gsub('([Pp][Uu][Bb][Ll][Ii][Ss][Hh][Ee][Rr]%s*%=*%s*{[^}%[]+)%s*%[([^%]]+)%]','%1%2')
+    -- remove duplicate year in [] and \copyright from YEAR
+    new_entry=new_entry:gsub('([Yy][Ee][Aa][Rr]%s*%=*%s*{[^}%[]*)%[[^%]]+%]%s*\\copyright%s*(%d+)','%1%2')
+    -- remove (translation?) information in [] from SERIES
     new_entry=new_entry:gsub('([Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{[^\n%[]+)[^%S\n]+%[[^%]]+%]','%1') -- {[^}%]]+)%s+%[[^%]]+%]
+    -- replace unabbreviated (full) series name/title by the matching abbreviated title from CSV in SERIES
     UnabbrSeries=''
     UnabbrSeries_naked=''
     if new_entry:match('[Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*([^\n]-)[% \t%.%,]*[Nn]?[oO]?%.?[^%S\n]*%d+[^%S\n]*}') then
       if not new_entry:match('[Vv][Oo][Ll][Uu][Mm][Ee]%s*%=%s*{') then
+        -- if SERIES has trailing No. XX, and there is no VOLUME in .bib entry, moves XX from SERIES as a newly created VOLUME value
         new_entry=new_entry:gsub('([Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*[^\n]-)[% \t%.%,]*[Nn]?[oO]?%.?[^%S\n]*(%d+)[^%S\n]*}','%1},\nVOLUME = {%2}')
       else
         UnabbrSeries=new_entry:gsub('^.*[Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*([^\n]-)[% \t%.%,]*[Nn]?[oO]?%.?[^%S\n]*%d+[^%S\n]*}[% \t%,]*\n.*$','%1') -- ([^}%]%.]+)
@@ -289,19 +302,30 @@ local function make_bib()
         new_entry=new_entry:gsub('([Mm][Rr][Nn][Uu][Mm][Bb][Ee][Rr]%s*%=%s*{)%s*(%d+)%s*(})','%10%2%3')
       end
     end
+    -- convert ProQuest Theses .bib entries...
     if new_entry:match('[Nn][Oo][Tt][Ee]%s*%=%s*{[^\n{]*[Tt][{}]?[hH][eE][sS][iI][sS][^}]*%-') and (new_entry:match('^%s*%@book%s*{') or new_entry:match('[Pp][rR][oO][Qq][uU][eE][sS][tT]')) then  -- {[^}%]]+)%s+%[[^%]]+%]
 -- '([SsMmNn][EeRrOo][RrCcTt][IiLlEe][EeAa]?[Ss]?[Ss]?%s*%=%s*{[^\n{]*[Tt][{}]?[hH][eE][sS][iI][sS])'
+      -- ...based on bookThesisAsPhDThesis config setting...
       if C.bookThesisAsPhDThesis then
+        --  ...to @phdtheses with new SCHOOL value from the end of the NOTE (and removing NOTE)
         new_entry=new_entry:gsub("^(%s*%@)%a+(%s*{)","%1phdthesis%2")
         new_entry=new_entry:gsub("([Nn][Oo][Tt][Ee]%s*%=%s*{[^\n{]*[Tt][{}]?[hH][eE][sS][iI][sS][^}]*[^%-])%-%-?%-?%s*([^%s%-][^}]+)}",'SCHOOL = {%2}')
         new_entry=new_entry:gsub("([Uu][Rr][Ll]%s*%=%s*%b{}%,?\n?",'')
       elseif not new_entry:match('[Se][Ee][Rr][Ii][Ee][Ss]%s*%=%s*{') then
+        --  ...(or) replacing NOTE by SERIES (for @book, to appear as `PhD Thesis---{SCHOOL}, {YEAR}')
         new_entry=new_entry:gsub("[Nn][Oo][Tt][Ee](%s*%=%s*%b{})",'SERIES%1')
       end
     end
+    -- fixing MathSciNet @incolliection type .bib responses for Art\'erisque as JOURNAL by converting it to @article
     if new_entry:match("[Jj][Oo][Uu][Rr][Nn][Aa][Ll]%s*%=%s*{[Aa][sS][tT]{?\\%'%s*{?[eE]}?%s*}?[rR][iI][sS][qQ][uU][eE]%s*}") and new_entry:match('^%s*%@incollection%s*{') then
       new_entry=new_entry:gsub('^(%s*%@)incollection(%s*{)','%1article%2')
     end
+    -- removing No. prefixes from VOLUMEs and NUMBERs
+    new_entry=new_entry:gsub("([VvNn][OoUu][LlMm][UuBb][MmEe][EeRr]%s*%=*%s*{)%s*[Nn][oO]%.%s*","%1")
+    -- inserting nonbreaking spaces (~) after first and before last one-letter abbreviations (or elements) in JOURNAL titles
+    new_entry=new_entry:gsub('([Jj][Oo][Uu][Rr][Nn][Aa][Ll]%s*%=*%s*{%s*%a.?)%s+','%1~')
+    new_entry=new_entry:gsub('([Jj][Oo][Uu][Rr][Nn][Aa][Ll]%s*%=*%s*{[^}]+)%s+(%a.?)%s*}','%1~%2}')
+    -- converting ancient TeX commands and accents by their counterparts used in our .sty's
     new_entry=new_entry:gsub("{%s*\\([rb][mf])%s+","\\math%1{")
     new_entry=new_entry:gsub("{%s*\\it%s+","\\mathit{")
     new_entry=new_entry:gsub("{%s*\\[fg][re][ar][km]%s+","\\mathfrak{")
@@ -312,11 +336,8 @@ local function make_bib()
     new_entry=new_entry:gsub("\\[fg][re][ar][km]([%s{])","\\mathfrak%1")
     new_entry=new_entry:gsub("\\Bbb([%s{])","\\mathbb%1")
     new_entry=new_entry:gsub("\\[Cc]al([%s{])","\\mathcal%1")
-    new_entry=new_entry:gsub("([VvNn][OoUu][LlMm][UuBb][MmEe][EeRr]%s*%=*%s*{)%s*[Nn][oO]%.%s*","%1")
     new_entry=new_entry:gsub("\\cprime%s*","'")
     new_entry=new_entry:gsub("\\polhk","\\k")
-    new_entry=new_entry:gsub('([Jj][Oo][Uu][Rr][Nn][Aa][Ll]%s*%=*%s*{%s*%a.?)%s+','%1~')
-    new_entry=new_entry:gsub('([Jj][Oo][Uu][Rr][Nn][Aa][Ll]%s*%=*%s*{[^}]+)%s+(%a.?)%s*}','%1~%2}')
     table.insert(bibtex_entries, new_entry)
   end
   F.write_file(output .. '.bib', table.concat(bibtex_entries, '\n\n'))
@@ -370,7 +391,8 @@ local function add_comments()
         end
       end
       orig_bibitem = orig_bibitem:gsub('%s+',' ')
-      -- Paste original entry and zbMATH entry.
+      -- Paste original entry and zbMATH entry
+      -- + MR .bib NOTE value, TeX-type response and Crossref match (based on config settings)
       if alphabetic then
         s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'\\bibitem%1{', labels[i], '}%2 ',
@@ -386,7 +408,8 @@ local function add_comments()
              F.mr_tex_info(MR_matched_TeX[i]),
              F.zbl_info(zbl_matches[i]), F.crossref_info(crossref_matches[i]), '\n\n'}
       end
-    else -- unmatched entry
+    else
+      -- original for unmatched (neither MathSciNet nor arXiv) entry w/zbMATH entry and Crossref match
       if alphabetic then
         s = '\\bibitem(%b[]){'..F.escape_lua(labels[i])..'}(.-)\n\n'
         r = {'%%%% EDIT AND SORT (!) UNMATCHED ENTRY:\n',
@@ -419,11 +442,13 @@ local function make_tex()
   end
   -- Escape percent character in replacement string.
   local r = F.escape_percent(new_bibl)
+  -- insert \arXiv definition (instead of \eprint, if any) after thebibliography preamble
   local eprintfind = '\\providecommand%s*{\\eprint}[^\n]+\n'
 ----  local eprintreplacement = '\\providecommand{\\eprint}%[2%]%[%]{\\url{#2}}\n\\renewcommand{\\eprint}%[2%]%[%]{\\expandafter\\if#1\\relax\\url{#2}\\else\\arXiv{#1}\\fi}\n'
 --  local eprintreplacement = '\\providecommand{\\eprint}[2][]{\\url{#2}}\n\\renewcommand{\\eprint}[2][]{\\expandafter\\if#1\\relax\\url{#2}\\else\\arXiv{#1}\\fi}\n'
   local eprintreplacement = '\\providecommand*\\arxiv{}\n\\makeatletter\n\\renewcommand\\arxiv[1]{\\expandafter\\ifx\\csname ems@maybebreak\\endcsname\\relax arXiv:\\allowbreak\\href{https://arxiv.org/abs/#1}{#1}\\else\\ems@maybebreak[\\fontdimen2\\font]{arXiv:\\href{https://arxiv.org/abs/#1}{#1}}\\fi}\n\\makeatother\n\\providecommand*\\arXiv{}\n\\renewcommand*\\arXiv[1]{\\arxiv{#1}}\n'
   if r:find(eprintfind) then r=r:gsub('('..eprintfind..')','%1'..eprintreplacement) else r=r:gsub('\\bibitem',eprintreplacement..'\n\\bibitem',1) end
+  -- replace \eprint{[arxiv_URL]} in \bibitem's by \arXiv{arxiv_ID}
   r=r:gsub('\\eprint%[([^%]]+)%]{https?%:%/%/arxiv%.org%/abs%/[^}]+}','\\arXiv{%1}')
   -- Replace original bibliography with modified one.
   local out = texcode:gsub(s, r, 1)
