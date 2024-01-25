@@ -452,20 +452,21 @@ function M.ucaseTitle(t)
  if (t:find('%s%l%l%l%l%l')) then -- there exists at least one at least 5 character long lowercase word
    to=to:gsub('(%u+)','{%1}')
  end
- local Greeks = {'alpha','beta','Gamma','gamma','Delta','delta','epsilon','varepsilon',
+ local macros = {'alpha','beta','Gamma','gamma','Delta','delta','epsilon','varepsilon',
   'zeta','eta','Theta','theta','vartheta','iota','kappa','Lambda','lambda',
   'mu','nu','xi','Xi','Pi','pi','rho','varrho','Sigma','sigma','varsigma',
   'tau','Upsilon','upsilon','Phi','phi','varphi','chi','Psi','psi','Omega','omega',
   'leq','geq'}
- local Grchars = {'α','β','Γ','γ','Δ','δ','ϵ','ε',
+ local chars = {'α','β','Γ','γ','Δ','δ','ϵ','ε',
   'ζ','η','Θ','θ','ϑ','ɩ','κ','Λ','λ',
   'μ','ν','ξ','Ξ','Π','π','ρ','ϱ','Σ','σ','ς',
   'τ','Υ','υ','Φ','φ','ϕ','χ','Ψ','ψ','Ω','ω',
   '≤','≥'}
- for i = 1, #Greeks do
-  to=to:gsub(Grchars[i]..'%a','\\'..Greeks[i]..' ')
-  to=to:gsub(Grchars[i],'\\'..Greeks[i])
+ for i = 1, #macros do
+  to=to:gsub(chars[i]..'%a','\\'..macros[i]..' ')
+  to=to:gsub(chars[i],'\\'..macros[i])
  end
+ to=to:gsub('%s+',' ')
  return to
 end
 
@@ -477,16 +478,17 @@ function M.get_arxiv(str,str_naked)
   local arxiv=''
   local axret=''
   local axentry
+  local strlow = str:lower()
   -- trying to get arXiv ID from preprint \bibitem entries...
-  if str:find('[aA][rR][Xx][iI][vV][:%.%(]?%s*[Pp]?r?e%-?print[:%.]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
-    arxiv = str:match('[aA][rR][Xx][iI][vV][:%.%(]?%s*[Pp]reprint[:%.]?%s*([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
-  elseif str:find('arxiv%.org%/abs%/[%a%d%/%.]+%d%/?') then
+  if strlow:find('arxiv[:%.%(]?%s*p?r?e%-?print[:%.]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
+    arxiv = str:match('[aA][rR][Xx][iI][vV][:%.%(]?%s*[Pp]?r?[Ee]%-?print[:%.]?%s*([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
+  elseif strlow:find('arxiv%.org%/abs%/[%a%d%/%.]+%d%/?') then
     arxiv = str:match('arxiv%.org%/abs%/([%a%d%/%.]+%d)%/?')
-  elseif str:find('[aA][rR][Xx][iI][vV]%s*[:%.%({]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then -- ') then
+  elseif strlow:find('arxiv%s*[:%.%({]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then -- ') then
     arxiv = str:match('[aA][rR][Xx][iI][vV]%s*[:%.%({]?%s*([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
-  elseif str:find('[aA][rR][Xx][iI][vV][:%.%s%(]*%s*[12][%d][%d][%d][:%.%,%)]*%s+[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
+  elseif strlow:find('arxiv[:%.%s%(]*%s*[12][%d][%d][%d][:%.%,%)]*%s+[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
     arxiv = str:match('[aA][rR][Xx][iI][vV][:%.%s%(]*%s*[12][%d][%d][%d][:%.%,%)]*%s+([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
-  elseif str:find('\\[eE][pP][rR][iI][nN][tT]%s*%{%s*[^%s%}]+%d%s*%}') then
+  elseif strlow:find('\\eprint%s*%{%s*[^%s%}]+%d%s*%}') then
     arxiv = str:match('\\[eE][pP][rR][iI][nN][tT]%s*%{%s*([^%s%}]+%d)%s*%}')
   end
   if arxiv~='' or str_naked:match('[Pp]?[rR?][eE]%-?[pP][rR][iI][nN][tT]') or str_naked:match('[aA][rR][xX][iI][vV]') then -- or str_naked:match('[Pp][rR][eE][pP][aA][rR][aA][tT][iI][oO][nN]')
@@ -529,24 +531,17 @@ This way, we need to iterate over the person array instead of the people table.
       else
         axauthors=axentry.author
       end
---      print ('FOUND AX authors: '..axauthors)
+      -- print ('FOUND AX authors: '..axauthors)
       ret = ret..'      AUTHOR = {'..axauthors..'},\n';
---      if arxiv:find('v%d+$') then
---        ret = ret..'      YEAR = {'..string.sub(axentry.updated,1,4)..'},\n';
---      elseif axentry.id:match('v(%d+)$')=='1' or 
       if string.sub(axentry.published,1,4)==string.sub(axentry.updated,1,4) then
         ret = ret..'      YEAR = {'..string.sub(axentry.published,1,4)..'},\n';
       else
         ret = ret..'      YEAR = {[v1]~'..string.sub(axentry.published,1,4)..', [v'..axentry.id:match('v(%d+)$')..']~'..string.sub(axentry.updated,1,4)..'},\n';
       end
       ret = ret..'      EPRINT = {'..axentry.id..'},\n';
---      ret = ret..'      EPRINT = {'..axentry.id..'},\n';
---      ret = ret..'      ARCHIVE = {'..'arXiv:'..axentry.id:match('arxiv%.org%/abs%/([%a%d%/%.]+)')..'},\n';
---      ret = ret..'      ARCHIVE = {'..'arXiv:\\allowbreak '..axentry.id:match('arxiv%.org%/abs%/([%a%d%/%.]+)')..'},\n';
       ret = ret..'      ARCHIVE = {'..axentry.id:match('arxiv%.org%/abs%/([%a%d%/%.]+)')..'},\n';
---      print ('FOUND AX title: '..axentry.title)
---      ret = ret..'      TITLE = {'..axentry.title..'}\n';
-      ret = ret..'      TITLE = {'..M.ucaseTitle(axentry.title)..'}\n';
+      -- print ('FOUND AX title: '..axentry.title)
+      ret = ret..'      TITLE = {'..M.ucaseTitle(axentry.title)..'}';
     end
   end
   return ret

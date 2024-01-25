@@ -45,12 +45,12 @@ M.mailto = false
 M.suffix = '_bibchecked'
 
 M.remove_files = {
---  '.bib',
---  '.bbl',
---  '.aux',
---  '.log',
---  '.dvi',
---  '.blg',
+  '.bib',
+  '.bbl',
+  '.aux',
+  '.log',
+  '.dvi',
+  '.blg',
 }
 
 --- MathSciNet settings.

@@ -88,6 +88,8 @@ local function make_bib()
   -- Remove comments and collect all \bibitem in a table.
   bibitems = F.split_at_bibitem(F.remove_comments(old_bibl))
   local all_labels = {}
+  local new_entry
+  local new_entry_low
   local new_entry_TeX
   local MR_number
   -- Process each \bibitem, Part I.
@@ -254,7 +256,7 @@ local function make_bib()
       if arxiv ~= '' then
         -- faking arXiv API match as MR match, to include entry in .bib as a @misc
         MR_matched[i] = true
-        t = {'@misc {', labels[i], ',\n',arxiv, ',', F.zbl_ID(zbl_matches[i]),'}'}
+        t = {'@misc {', labels[i], ',\n',arxiv, ',\n', F.zbl_ID(zbl_matches[i]),'}'}
       else
         -- Save entry as 'unmatched'.
         MR_matched[i] = false
@@ -263,6 +265,7 @@ local function make_bib()
       new_entry = table.concat(t)
     end
     crossref_matches[i] = crossref
+    new_entry_low=new_entry:lower()
     -- remove Verlag from PUBLISHER .bib values after Springer and Birkh\"auser
     new_entry=new_entry:gsub('([Pp][Uu][Bb][Ll][Ii][Ss][Hh][Ee][Rr]%s*%=*%s*{[^}]+a?}?}?[nNuU][gGsS][eE][rR])[%s%-]+[Vv][eE][rR][lL][aA][gG]','%1')
     -- replace eprint PAGES article number prefiexes (Art./Article/Paper no./number, etc.) by `article no.'
@@ -273,18 +276,20 @@ local function make_bib()
     new_entry=new_entry:gsub('([Yy][Ee][Aa][Rr]%s*%=*%s*{[^}%[]*)%[[^%]]+%]%s*\\copyright%s*(%d+)','%1%2')
     -- remove (translation?) information in [] from SERIES
     new_entry=new_entry:gsub('([Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{[^\n%[]+)[^%S\n]+%[[^%]]+%]','%1') -- {[^}%]]+)%s+%[[^%]]+%]
+    new_entry_low=new_entry:lower()
     -- replace unabbreviated (full) series name/title by the matching abbreviated title from CSV in SERIES
     UnabbrSeries=''
     UnabbrSeries_naked=''
-    if new_entry:match('[Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*([^\n]-)[% \t%.%,]*[Nn]?[oO]?%.?[^%S\n]*%d+[^%S\n]*}') then
-      if not new_entry:match('[Vv][Oo][Ll][Uu][Mm][Ee]%s*%=%s*{') then
+    if new_entry_low:match('series%s*%=%s*{%s*([^\n]-)[% \t%.%,]*n?o?%.?[^%S\n]*%d+[^%S\n]*}') then
+      if not new_entry_low:match('volume%s*%=%s*{') then
         -- if SERIES has trailing No. XX, and there is no VOLUME in .bib entry, moves XX from SERIES as a newly created VOLUME value
         new_entry=new_entry:gsub('([Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*[^\n]-)[% \t%.%,]*[Nn]?[oO]?%.?[^%S\n]*(%d+)[^%S\n]*}','%1},\nVOLUME = {%2}')
       else
         UnabbrSeries=new_entry:gsub('^.*[Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*([^\n]-)[% \t%.%,]*[Nn]?[oO]?%.?[^%S\n]*%d+[^%S\n]*}[% \t%,]*\n.*$','%1') -- ([^}%]%.]+)
       end
     end
-    if (UnabbrSeries=='' or UnabbrSeries==nil) and new_entry:match('[Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*([^\n]-)[% \t%.]*}') then -- ([^}%]%.]+)
+    new_entry_low=new_entry:lower()
+    if (UnabbrSeries=='' or UnabbrSeries==nil) and new_entry_low:match('series%s*%=%s*{%s*([^\n]-)[% \t%.]*}') then -- ([^}%]%.]+)
       UnabbrSeries=new_entry:gsub('^.*[Ss][Ee][Rr][Ii][Ee][Ss]%s*%=*%s*{%s*([^\n]-)[% \t%.]*}[% \t%,]*\n.*$','%1') -- ([^}%]%.]+)
     end
     if UnabbrSeries~='' and UnabbrSeries~=nil then
@@ -303,21 +308,21 @@ local function make_bib()
       end
     end
     -- convert ProQuest Theses .bib entries...
-    if new_entry:match('[Nn][Oo][Tt][Ee]%s*%=%s*{[^\n{]*[Tt][{}]?[hH][eE][sS][iI][sS][^}]*%-') and (new_entry:match('^%s*%@book%s*{') or new_entry:match('[Pp][rR][oO][Qq][uU][eE][sS][tT]')) then  -- {[^}%]]+)%s+%[[^%]]+%]
--- '([SsMmNn][EeRrOo][RrCcTt][IiLlEe][EeAa]?[Ss]?[Ss]?%s*%=%s*{[^\n{]*[Tt][{}]?[hH][eE][sS][iI][sS])'
+    if new_entry_low:match('note%s*%=%s*{[^\n{]*t[{}]?hesis[^}]*%-') and (new_entry:match('^%s*%@book%s*{') or new_entry_low:match('proquest')) then  -- {[^}%]]+)%s+%[[^%]]+%]
+-- '([smn][ero][rct][ile][ea]?s?s?%s*%=%s*{[^\n{]*t[{}]?hesis)'
       -- ...based on bookThesisAsPhDThesis config setting...
       if C.bookThesisAsPhDThesis then
         --  ...to @phdtheses with new SCHOOL value from the end of the NOTE (and removing NOTE)
         new_entry=new_entry:gsub("^(%s*%@)%a+(%s*{)","%1phdthesis%2")
         new_entry=new_entry:gsub("([Nn][Oo][Tt][Ee]%s*%=%s*{[^\n{]*[Tt][{}]?[hH][eE][sS][iI][sS][^}]*[^%-])%-%-?%-?%s*([^%s%-][^}]+)}",'SCHOOL = {%2}')
         new_entry=new_entry:gsub("([Uu][Rr][Ll]%s*%=%s*%b{}%,?\n?",'')
-      elseif not new_entry:match('[Se][Ee][Rr][Ii][Ee][Ss]%s*%=%s*{') then
+      elseif not new_entry_low:match('series%s*%=%s*{') then
         --  ...(or) replacing NOTE by SERIES (for @book, to appear as `PhD Thesis---{SCHOOL}, {YEAR}')
         new_entry=new_entry:gsub("[Nn][Oo][Tt][Ee](%s*%=%s*%b{})",'SERIES%1')
       end
     end
     -- fixing MathSciNet @incolliection type .bib responses for Art\'erisque as JOURNAL by converting it to @article
-    if new_entry:match("[Jj][Oo][Uu][Rr][Nn][Aa][Ll]%s*%=%s*{[Aa][sS][tT]{?\\%'%s*{?[eE]}?%s*}?[rR][iI][sS][qQ][uU][eE]%s*}") and new_entry:match('^%s*%@incollection%s*{') then
+    if new_entry_low:match("journal%s*%=%s*{ast{?\\%'%s*{?e}?%s*}?risque%s*}") and new_entry:match('^%s*%@incollection%s*{') then
       new_entry=new_entry:gsub('^(%s*%@)incollection(%s*{)','%1article%2')
     end
     -- removing No. prefixes from VOLUMEs and NUMBERs
