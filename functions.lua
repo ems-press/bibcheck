@@ -6,6 +6,10 @@ local pl_file = require 'pl.file'
 local C = require 'config'
 local json = require 'dkjson'
 
+if C.checkArXiv then
+  xml2lua = require("xml2lua")
+end
+
 M.sep = package.config:sub(1, 1)
 -- TRUE if Windows, otherwise FALSE
 local win = (M.sep == '\\')
@@ -70,7 +74,6 @@ do
     for s, r in pairs(matches) do
       replace(s, r)
     end
-
     return str
   end
 end
@@ -92,13 +95,38 @@ function M.split_at_bibitem(str)
   return t
 end
 
---- Return some values of former JSON table from zbMATH.
+-- Return some values of former JSON table from zbMATH as a comment
+---- with relevance score (also \Zbl{} if score is below the threshold) in the prefix
 -- Input: table tab
 -- Output: string
 function M.zbl_info(tab)
   if tab then
+    local smallscore=' (score: '..tostring(tab.score)..')'
     local ret = {tab.authors, tab.title, tab.source}
-    return '\n%%__ zbMATH:\n%% '..table.concat(ret, '; ')
+    if (tab.score<C.ZblRelevanceScoreThreshold) then --<5.5
+      smallscore = ' (\\Zbl{'..tab.zbl_id..'}, score: '..tostring(tab.score)..')'
+    end
+    return '\n%%__ zbMATH'..smallscore..':\n%% '..table.concat(ret, '; ')
+  else
+    return ''
+  end
+end
+
+-- return MathSciNet TeX-type response as a comment
+function M.mr_tex_info(s)
+  if s~='' and s~=nil then
+    s=s:gsub("\\cprime%s*","'")
+    return '\n%%__ MathSciNet-TeX:\n%% '..s:gsub('%s+',' ')
+  else
+    return ''
+  end
+end
+
+-- return .bib's NOTE value as a comment
+function M.mr_note_info(s)
+  if s~='' and s~=nil then
+    s=s:gsub("\\cprime%s*","'")
+    return '\n%%__ MathSciNet Bib NOTE:\n%% '..s:gsub('%s+',' ')
   else
     return ''
   end
@@ -109,7 +137,13 @@ end
 -- Output: string
 function M.crossref_info(tab)
   if tab then
-    local title = tab.title[1]
+    -- fix for Crossref not returning a title (or the title returned is empty)
+    local title = ''
+    if tab.title then
+      title = tab.title[1]
+    else
+      title = '[No title returned by Crossref]'
+    end
     title = title:gsub('\n', '')
     return '\n%%\n%% No DOI in MathSciNet. With a relevance score of '
     ..tab.score..' Crossref returned:\n%% '
@@ -123,11 +157,29 @@ end
 -- Input: table tab
 -- Output: string
 function M.zbl_ID(tab)
-  -- if tab then
-  if tab and type(tab)=='table' and tab.zbl_id then
+  -- if tab, AND relevance score is above the threshold then
+  if tab and type(tab)=='table' and tab.zbl_id and tab.score>=C.ZblRelevanceScoreThreshold then -- >=5.5
   -- Formally, we need to check if tab.zbl_id is a string because
   -- string concatenation .. expects a string, or something that can be converted to one.
+   if C.checkNumdam and not new_entry:find('NUMDAM%s+=') then 
+    -- checking zbMATH page for NUMDAM entry, based on config setting
+    -- ...and put it to the .bib entry as NUMDAM value
+    local retwo
+    retwo = M.execute('Checking Zbl for Numdam ('..tab.zbl_id..')', false,
+      'wget -qO-', M.quote('https://zbmath.org/'..tab.zbl_id))
+    local numdam_entry
+    if retwo:find('numdam%.org%/item.id%=') then --\.org\/item\?id\=') then
+      numdam_entry = retwo:match('numdam%.org%/item.id%=(.-)"') --\.org\/item\?id=(.-)"')
+      print('found: '..numdam_entry);
+      numdam_entry = '\nNUMDAM = {'..numdam_entry..'},'
+    else
+      print('not found');
+      numdam_entry = ''
+    end
+    return numdam_entry..'\nZBLNUMBER = {'..tab.zbl_id..'},'
+   else
     return '\nZBLNUMBER = {'..tab.zbl_id..'},'
+   end
   else
     return ''
   end
@@ -172,6 +224,9 @@ do
     {"\\%.", ''}, -- dot
     {"\\!", ''},
     {"\\i(%A)", 'i%1'}, -- dotless i
+    {'\\href{[^}]+}', ''}, -- remove \href links,...
+    {'\\MR{[^}]+}', ''}, -- ...\MR{}s,...
+    {'\\Zbl{[^}]+}', ''}, -- ...and \Zbl{}s from the query (for getting result more reliably)
     {'\\%a%s', ''},
     {'\\%a+(%A)', '%1'}, -- remove all latex commands, especially accents \H, \v, etc.
     {'~', ' '},
@@ -259,20 +314,36 @@ do
 end
 
 --- Create pipe and execute command.
+---- if command is a plain wget and it produces no output,
+---- re-execute it with --no-check-certificate option (assuming SSL error)
 -- Input: string info, boolean log (print output), variable number of strings ...
 -- Output: string
 function M.execute(info, log, ...)
   if info then print(info) end
   local t = {}
+  local z = {}
+  local wgetwcert=false
+  if select(1,...)=='wget -qO-' then wgetwcert=true end
   for i = 1, select('#', ...) do
     t[i] = tostring((select(i, ...)))
+    if wgetwcert then
+      if i==1 then
+        z[i] = 'wget --no-check-certificate -qO-'
+      else
+        z[i] = tostring((select(i, ...)))
+      end
+    end
   end
   local p = assert(io.popen(table.concat(t, ' ')),
     '*** Cannot execute command. ***')
   local out = p:read('*all')
   p:close()
-  if log then print(out) end
-  return out
+  if (out=='' or out==nil) and wgetwcert then
+    return M.execute(nil, log, table.concat(z, ' '))
+  else
+    if log then print(out) end
+    return out
+  end
 end
 
 --- Create (OS-dependent) path.
@@ -360,6 +431,126 @@ function M.get_crossref(str)
   ret = isTable(ret) and ret.items
   ret = isTable(ret) and table.unpack(ret)
   return ret
+end
+
+-- function for print table values-keys recursively for debugging
+function M.printTable(t,l)
+ local nextlevel=l+1
+ for k,v in pairs(t) do
+  if type(v)=='table' then
+   M.printTable(v,nextlevel)
+  else
+   print (l..'. '..k..': '..v)
+  end
+ end
+end
+
+-- function for trying to convert (arXiv API returned) titles properly case-preserving string by BibTeX
+-- + converting greek letters and leq/geq chars in titles by their TeX commands
+function M.ucaseTitle(t)
+ local to=t:gsub('(%$[^%$]+%$)','{%1}')
+ if (t:find('%s%l%l%l%l%l')) then -- there exists at least one at least 5 character long lowercase word
+   to=to:gsub('(%u+)','{%1}')
+ end
+ local macros = {'alpha','beta','Gamma','gamma','Delta','delta','epsilon','varepsilon',
+  'zeta','eta','Theta','theta','vartheta','iota','kappa','Lambda','lambda',
+  'mu','nu','xi','Xi','Pi','pi','rho','varrho','Sigma','sigma','varsigma',
+  'tau','Upsilon','upsilon','Phi','phi','varphi','chi','Psi','psi','Omega','omega',
+  'leq','geq'}
+ local chars = {'α','β','Γ','γ','Δ','δ','ϵ','ε',
+  'ζ','η','Θ','θ','ϑ','ɩ','κ','Λ','λ',
+  'μ','ν','ξ','Ξ','Π','π','ρ','ϱ','Σ','σ','ς',
+  'τ','Υ','υ','Φ','φ','ϕ','χ','Ψ','ψ','Ω','ω',
+  '≤','≥'}
+ for i = 1, #macros do
+  to=to:gsub(chars[i]..'%a','\\'..macros[i]..' ')
+  to=to:gsub(chars[i],'\\'..macros[i])
+ end
+ to=to:gsub('%s+',' ')
+ return to
+end
+
+--- query arXiv API for ID
+-- Input: string str
+-- Output: Atom XML -> table -> BibTeX data list
+function M.get_arxiv(str,str_naked)
+  local ret = ''
+  local arxiv=''
+  local axret=''
+  local axentry
+  local strlow = str:lower()
+  -- trying to get arXiv ID from preprint \bibitem entries...
+  if strlow:find('arxiv[:%.%(]?%s*p?r?e%-?print[:%.]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
+    arxiv = str:match('[aA][rR][Xx][iI][vV][:%.%(]?%s*[Pp]?r?[Ee]%-?print[:%.]?%s*([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
+  elseif strlow:find('arxiv%.org%/abs%/[%a%d%/%.]+%d%/?') then
+    arxiv = str:match('arxiv%.org%/abs%/([%a%d%/%.]+%d)%/?')
+  elseif strlow:find('arxiv%s*[:%.%({]?%s*[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then -- ') then
+    arxiv = str:match('[aA][rR][Xx][iI][vV]%s*[:%.%({]?%s*([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
+  elseif strlow:find('arxiv[:%.%s%(]*%s*[12][%d][%d][%d][:%.%,%)]*%s+[%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d') then
+    arxiv = str:match('[aA][rR][Xx][iI][vV][:%.%s%(]*%s*[12][%d][%d][%d][:%.%,%)]*%s+([%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.][%a%d%/%.]+%d)')
+  elseif strlow:find('\\eprint%s*%{%s*[^%s%}]+%d%s*%}') then
+    arxiv = str:match('\\[eE][pP][rR][iI][nN][tT]%s*%{%s*([^%s%}]+%d)%s*%}')
+  end
+  if arxiv~='' or str_naked:match('[Pp]?[rR?][eE]%-?[pP][rR][iI][nN][tT]') or str_naked:match('[aA][rR][xX][iI][vV]') then -- or str_naked:match('[Pp][rR][eE][pP][aA][rR][aA][tT][iI][oO][nN]')
+  -- if arXiv ID found OR the entry is a preprint or arXiv...
+    local function isTable(t) return t and type(t) == 'table' end
+    if arxiv~='' then
+     -- arXiv number found, querying arXiv API for arXiv ID
+     axret = M.execute('arXiv found: '..arxiv..', checking arXiv API... ' --..i..' of '..#bibitems
+      , false,
+      'wget -qO-', M.quote(C.arxivapi .. M.escapeUrl(arxiv)))
+    else
+     -- arXiv number NOT found, querying arXiv API for (naked) bibitem value for best match...
+-- print (C.arxivapiq .. M.escapeUrl(str_naked:gsub("^%s*(.-)%s*$", "%1")))
+     axret = M.execute('  querying arXiv for '..str_naked:gsub("^%s*(.-)%s*$", "%1"), --..i..' of '..#bibitems
+      false,
+      'wget -qO-', M.quote(C.arxivapiq .. M.escapeUrl(str_naked:gsub("^%s*(.-)%s*$", "%1"))))
+    end
+    local xmlhandler = require("xmlhtree")
+    local axHandler = xmlhandler:new()
+    local xmlparser = xml2lua.parser(axHandler)
+--  print (axret)
+    xmlparser:parse(axret)
+    local axentry = axHandler and axHandler.root and type(axHandler.root)=='table' and axHandler.root.feed and type(axHandler.root.feed)=='table' and axHandler.root.feed.entry
+--[[
+If there is more than one person, then person is an array instead of a regular table.
+This way, we need to iterate over the person array instead of the people table.
+]]
+-- if type(axentry)=='table' then M.printTable(axentry,1) end
+    local axauthors=''
+    if axentry and axentry.author then
+      if type(axentry.author)=='table' then
+        if axentry.author.name then
+          axauthors=axentry.author.name
+        else
+         for axauk, axauv in ipairs(axentry.author) do
+          if (axauk > 1) then axauthors=axauthors..' and ' end
+            axauthors=axauthors..axauv.name
+         end
+        end
+      else
+        axauthors=axentry.author
+      end
+      -- print ('FOUND AX authors: '..axauthors)
+      ret = ret..'      AUTHOR = {'..axauthors..'},\n';
+      if string.sub(axentry.published,1,4)==string.sub(axentry.updated,1,4) then
+        ret = ret..'      YEAR = {'..string.sub(axentry.published,1,4)..'},\n';
+      else
+        ret = ret..'      YEAR = {[v1]~'..string.sub(axentry.published,1,4)..', [v'..axentry.id:match('v(%d+)$')..']~'..string.sub(axentry.updated,1,4)..'},\n';
+      end
+      ret = ret..'      EPRINT = {'..axentry.id..'},\n';
+      ret = ret..'      ARCHIVE = {'..axentry.id:match('arxiv%.org%/abs%/([%a%d%/%.]+)')..'},\n';
+      -- print ('FOUND AX title: '..axentry.title)
+      ret = ret..'      TITLE = {'..M.ucaseTitle(axentry.title)..'}';
+    end
+  end
+  return ret
+end
+
+-- function to check whether the {name} path/files exists
+function M.file_exists(name)
+   local f=io.open(name,"r")
+   if f~=nil then io.close(f) return true else return false end
 end
 
 return M
